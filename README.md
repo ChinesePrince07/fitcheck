@@ -26,6 +26,10 @@ Always generates with **Nano Banana Pro** (`gemini-3-pro-image`) at **4K** — t
 
 Categories include a **Whole set** slot: drop in one photo of a complete outfit (a flat-lay with the shirt + pants, or someone else's fit) and it dresses you in the entire look — it uses only the clothing from that photo, never the other person's face or body.
 
+**Hairstyle try-on** (section III): pick one of the built-in presets (buzz, Ivy League, slicked back, curtains, man bun, waves, bob, …) *or* upload a reference photo of a cut. Leave it untouched to keep your own hair. You can generate a hairstyle change on its own, no clothing required.
+
+The generation prompt hard-locks your identity (face, bone structure, skin tone, body, pose, background) with explicit "do not beautify/alter" instructions so the model swaps only what you chose — the fix for earlier face drift.
+
 ## Tips
 
 - Use a **full-body, front-facing, well-lit** photo of yourself — required for pants/shoes to render.
