@@ -1,54 +1,54 @@
-# FitCheck 👔🍌
+# FitCheck 👔
 
-*Try the outfit on your actual body before your wallet finds out.*
+See how clothes look on you before you buy them.
 
-I kept buying clothes online that looked unreal on some 6'2" model with the metabolism of a hummingbird, and then they'd show up and hang off me like a damp bin bag. So I built a little thing that puts the clothes on **me** first — using the AI image model that's been quietly eating everyone's lunch — so now I can be disappointed for free, in advance, from the comfort of my own home.
+I kept ordering things online that looked great on the model and landed badly on me, so I built this to put the clothes on a photo of *me* first. It uses AI image generation to show the fit before I commit to buying.
 
 ![The FitCheck app](assets/hero.png)
 
-## the pitch
+## What it does
 
-Upload a photo of yourself. Upload photos of clothes you're eyeing (screenshots straight off the shop's website work great). Tap a shirt, tap some trousers, throw a watch on if you're feeling fancy, and FitCheck spits out a photoreal picture of *you* actually wearing the combo. It's a dressing room that doesn't judge you, doesn't have a queue, and doesn't have that one cursed light that makes everyone look grey and unwell.
+Upload a photo of yourself and photos of the clothes you're considering (screenshots from a shop's site work fine). Pick a top, some trousers, maybe a watch, and FitCheck generates a photorealistic image of you wearing that combination.
 
 ![A generated try-on](assets/try-on.png)
 
-*(that's the demo guy, not me — but you get it. he's modelling a shirt and trousers he has never once paid for.)*
+*(That's the demo image, not me — but you get the idea.)*
 
-## things it does that i'm weirdly proud of
+## Features
 
-- **Mix & match, commitment-issues edition.** Select two tops, three bottoms, whatever you like, and it renders *every* combination as its own look so you can compare them side by side. Six outfits in one click. It even tells you the damage before you commit, so nobody's card gets a nasty surprise.
-- **Whole-set mode.** Saw a full fit on somebody cooler than you? Drop in one photo and it dresses you in the entire look — just the clothes, we leave their face out of it, we're not monsters.
-- **Hairstyle try-on.** Because sometimes it isn't the outfit, it's the hair. Pick a preset (buzz, Ivy League, slicked back, man bun, the whole barbershop) or upload a cut you're eyeing, and see it on your own head *before* someone with scissors makes it a permanent life decision.
-- **A lookbook**, so you can line up all your maybes, admire them at length, and then buy absolutely none of them.
+- **Mix and match** — select several tops, bottoms, or shoes and it renders every combination as its own look, so you can compare them. It shows the number of looks and the rough cost before generating.
+- **Whole-set mode** — drop in one photo of a complete outfit (a flat lay, or a look you saw somewhere) and it dresses you in the whole thing, using only the clothing from that photo.
+- **Hairstyle try-on** — choose a preset (buzz, Ivy League, slicked back, and so on) or upload a reference, and preview a new cut before booking the barber.
+- **Lookbook** — every result is saved so you can compare your options side by side.
 
-## is it "nano banana"
+## The model
 
-Yeah, basically. It runs on Google's **Nano Banana Pro** (`gemini-3-pro-image`) at full 4K, because I have no chill. Out of everything I tried, it's the best at keeping your actual face *your actual face* while swapping the clothes — which, plot twist, is the entire hard part of this whole idea. Each look runs about **24 cents** and takes ~30–60 seconds, which is still cheaper and considerably faster than shipping things back.
+It uses Google's **Nano Banana Pro** (`gemini-3-pro-image`) at 4K. In my testing it was the best at keeping your face and body consistent while changing only the clothes, which is the hard part. Each look costs roughly **$0.24** and takes about 30–60 seconds.
 
-## running it
+## Running it
 
-It's one HTML file, one stylesheet, and one JS file. No build step, no framework, no `node_modules` folder the size of a small moon.
+It's a single HTML file, one stylesheet, and one JavaScript file — no build step and no dependencies.
 
 ```bash
 cd fitcheck
 python3 -m http.server 4173
-# then open http://localhost:4173
+# open http://localhost:4173
 ```
 
-Pop your Gemini API key into the ⚙ Settings (grab one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Heads up: the image models have no free tier, so flip billing on or it'll just politely refuse to do anything.
+Add a Gemini API key in Settings (⚙) — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Note that the image models have no free tier, so the key needs billing enabled.
 
-Want it on your phone in the shop? It deploys to Vercel, and there's a little `/api/generate` proxy so your key lives server-side instead of getting bundled into a public webpage where any goblin could nick it.
+To host it (for example, to use on your phone), it deploys to Vercel with an `/api/generate` proxy that keeps your key server-side rather than in the client bundle.
 
-## where do my photos go
+## Privacy
 
-Nowhere. They live in your own browser (IndexedDB), and the *only* time an image leaves your machine is the single API call to Google that actually makes the picture. No server, no account, no newsletter, no "we've updated our privacy policy." Clear your browser data and it's like the whole thing never happened.
+Your photos stay in your browser (IndexedDB). The only time an image leaves your machine is the API call to Google that generates the picture — there's no server, account, or tracking. Clearing your browser data removes everything.
 
-## the fine print
+## Notes
 
-- It shows you **vibes, not tailoring.** It will not warn you that the medium is a touch tight in the shoulders — use your own two eyes for that part.
-- Every so often the safety filter clutches its pearls at a perfectly normal photo. A different crop usually calms it down.
-- Built with vanilla JavaScript and sheer stubbornness. Reviewed by nobody. Deployed on hope.
+- It shows the overall look, not exact fit — it won't tell you if something runs tight in the shoulders.
+- Occasionally the safety filter blocks a normal photo; a different crop usually fixes it.
+- Built with plain JavaScript, for personal use.
 
 ---
 
-*Made because I have a shopping problem and my coding agent has a "sure, I'll build that" problem.* 🍌
+A personal project, built for fun.
