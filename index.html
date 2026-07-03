@@ -31,38 +31,42 @@
 </div>
 
 <main>
-  <section id="you-section" class="reveal">
-    <header class="sec-head">
-      <h2><span class="step">I</span> The Subject</h2>
-      <p class="hint">A clear <strong>full-length, front-facing</strong> portrait serves best — trousers and shoes need it. Select one to make it the sitting.</p>
-    </header>
-    <div class="grid" id="photos-grid"></div>
-  </section>
+  <aside class="rail">
+    <section id="you-section" class="reveal">
+      <header class="sec-head">
+        <h2><span class="step">I</span> The Subject</h2>
+        <p class="hint">A clear <strong>full-length, front-facing</strong> photo works best. Tap one to select it.</p>
+      </header>
+      <div class="grid" id="photos-grid"></div>
+    </section>
 
-  <section id="wardrobe-section" class="reveal">
-    <header class="sec-head">
-      <h2><span class="step">II</span> The Wardrobe</h2>
-      <p class="hint">Add the pieces under consideration and select any number in each category — every combination is rendered as its own look. Mix and match at leisure.</p>
-    </header>
-    <div id="categories"></div>
-  </section>
+    <section id="lookbook-section" class="reveal">
+      <header class="sec-head">
+        <h2><span class="step">IV</span> The Lookbook</h2>
+        <p class="hint">Your generated looks, kept to compare before you commit.</p>
+      </header>
+      <div class="grid looks" id="looks-grid"></div>
+    </section>
+  </aside>
 
-  <section id="hair-section" class="reveal">
-    <header class="sec-head">
-      <h2><span class="step">III</span> The Coiffure</h2>
-      <p class="hint">Try a new cut — choose a preset below, or bring your own reference photograph of a hairstyle. Touch nothing to keep your own.</p>
-    </header>
-    <div class="hair-presets" id="hair-presets"></div>
-    <div class="grid" id="hair-grid"></div>
-  </section>
+  <div class="board">
+    <section id="wardrobe-section" class="reveal">
+      <header class="sec-head">
+        <h2><span class="step">II</span> The Wardrobe</h2>
+        <p class="hint">Add pieces, then select any number per category — every combination becomes its own look.</p>
+      </header>
+      <div id="categories"></div>
+    </section>
 
-  <section id="lookbook-section" class="reveal">
-    <header class="sec-head">
-      <h2><span class="step">IV</span> The Lookbook</h2>
-      <p class="hint">Every rendering is kept here, that you might compare before you commit.</p>
-    </header>
-    <div class="grid looks" id="looks-grid"></div>
-  </section>
+    <section id="hair-section" class="reveal">
+      <header class="sec-head">
+        <h2><span class="step">III</span> The Coiffure</h2>
+        <p class="hint">Pick a preset or upload a cut. Leave it to keep your own hair.</p>
+      </header>
+      <div class="hair-presets" id="hair-presets"></div>
+      <div class="grid" id="hair-grid"></div>
+    </section>
+  </div>
 </main>
 
 <footer class="outfit-bar" id="outfit-bar"></footer>
