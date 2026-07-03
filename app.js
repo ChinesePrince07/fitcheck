@@ -80,6 +80,14 @@ function saveSettings(s) {
   localStorage.setItem('fitcheck.settings', JSON.stringify(s));
 }
 
+/* On a deployed (non-localhost) origin, generation goes through the /api/generate
+   proxy that holds the key server-side, so no client key is needed. Locally, the
+   baked-in config.js / Settings key is used and requests go straight to Google. */
+function proxyAvailable() {
+  return location.protocol.startsWith('http') && !/^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
+}
+function canGenerate() { return !!getSettings().apiKey || proxyAvailable(); }
+
 /* ============================== selection (mix & match) ============================== */
 
 const MAX_LOOKS_PER_RUN = 20;   // safety cap on a single mix-and-match batch
@@ -282,19 +290,17 @@ const PROVIDERS = {
         dataUrlToInlinePart(person.dataUrl),
         ...items.map(it => dataUrlToInlinePart(it.dataUrl)),
       ];
-      const makeBody = withImageConfig => JSON.stringify({
+      const makeBody = withImageConfig => ({
         contents: [{ parts }],
         generationConfig: {
           responseModalities: ['IMAGE', 'TEXT'],
           ...(withImageConfig ? { imageConfig: { aspectRatio: nearestAspect(person.w, person.h), imageSize } } : {}),
         },
       });
-      const call = body => fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-        body,
-        signal,
-      });
+      const useProxy = !apiKey;   // no client key => route through the server-side /api/generate proxy
+      const call = bodyObj => useProxy
+        ? fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, body: bodyObj }), signal })
+        : fetch(`${GEMINI_BASE}/models/${model}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(bodyObj), signal });
 
       let res = await call(makeBody(true));
       let json = await res.json().catch(() => ({}));
@@ -412,7 +418,7 @@ function renderOutfitBar() {
 }
 
 function renderBanner() {
-  $('#key-banner').classList.toggle('hidden', !!getSettings().apiKey);
+  $('#key-banner').classList.toggle('hidden', canGenerate());
 }
 
 function renderAll() {
@@ -486,7 +492,7 @@ async function handleFiles(files) {
 async function generate() {
   if (state.generating) return;
   const s = getSettings();
-  if (!s.apiKey) { openSettings(); toast('Add your Gemini API key first (billing enabled — image models have no free tier).', 'err'); return; }
+  if (!canGenerate()) { openSettings(); toast('Add your Gemini API key first (billing enabled — image models have no free tier).', 'err'); return; }
   const person = state.photos.find(p => p.id === state.activePhotoId);
   if (!person) { toast('Add a photo of yourself first (section 1).', 'err'); return; }
   if (!selectedItems().length && !state.hairPreset) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
