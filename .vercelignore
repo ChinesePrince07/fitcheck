@@ -1,0 +1,7 @@
+# NEVER deploy the local key file — the deployed app uses the GEMINI_API_KEY
+# env var via the /api/generate proxy instead.
+config.js
+
+# not needed at runtime
+docs/
+README.md
