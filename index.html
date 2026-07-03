@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FitCheck — virtual try-on</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👗</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">👗</span>
+    <div>
+      <h1>FitCheck</h1>
+      <p class="tagline">try it on before you cop it</p>
+    </div>
+  </div>
+  <button class="iconbtn" data-action="open-settings" title="Settings" aria-label="Settings">⚙</button>
+</header>
+
+<div id="key-banner" class="banner hidden">
+  <span>No API key set — generation is disabled until you add your Gemini key.</span>
+  <button class="btn small" data-action="open-settings">Open Settings</button>
+</div>
+
+<main>
+  <section id="you-section">
+    <header class="sec-head">
+      <h2><span class="step">1</span> You</h2>
+      <p class="hint">Add a clear <strong>full-body, front-facing</strong> photo — needed for pants &amp; shoes. Tap a photo to make it the active one.</p>
+    </header>
+    <div class="grid" id="photos-grid"></div>
+  </section>
+
+  <section id="wardrobe-section">
+    <header class="sec-head">
+      <h2><span class="step">2</span> Wardrobe</h2>
+      <p class="hint">Add pieces you're eyeing, then tap to select — one per category. Mix &amp; match away.</p>
+    </header>
+    <div id="categories"></div>
+  </section>
+
+  <section id="lookbook-section">
+    <header class="sec-head">
+      <h2><span class="step">3</span> Lookbook</h2>
+      <p class="hint">Every generated fit lands here so you can compare before you buy.</p>
+    </header>
+    <div class="grid looks" id="looks-grid"></div>
+  </section>
+</main>
+
+<footer class="outfit-bar" id="outfit-bar"></footer>
+
+<!-- Settings modal -->
+<div class="modal" id="settings-modal">
+  <div class="modal-card">
+    <header><h3>Settings</h3><button class="iconbtn" data-action="close-modal">✕</button></header>
+    <label class="field">
+      <span>Gemini API key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">(get one)</a> — image models need billing enabled, no free tier</span>
+      <span class="keyrow">
+        <input type="password" id="set-key" placeholder="AIza..." autocomplete="off" spellcheck="false">
+        <button class="iconbtn" data-action="toggle-key-vis" title="Show/hide">👁</button>
+      </span>
+    </label>
+    <label class="field">
+      <span>Model</span>
+      <select id="set-model">
+        <option value="gemini-3.1-flash-image">Nano Banana 2 — great &amp; fast (~$0.07/look)</option>
+        <option value="gemini-3-pro-image">Nano Banana Pro — max fidelity (~$0.13/look)</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Output resolution</span>
+      <select id="set-size">
+        <option value="1K">1K — plenty for fit checks</option>
+        <option value="2K">2K — sharper, costs a bit more</option>
+      </select>
+    </label>
+    <div class="row">
+      <button class="btn" data-action="test-key" id="test-key-btn">Test key</button>
+      <span id="test-key-result" class="test-result"></span>
+      <span class="spacer"></span>
+      <button class="btn primary" data-action="save-settings">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Look viewer modal -->
+<div class="modal" id="viewer-modal">
+  <div class="modal-card viewer">
+    <header><h3 id="viewer-title">Your fit</h3><button class="iconbtn" data-action="close-modal">✕</button></header>
+    <img id="viewer-img" alt="Generated try-on result">
+    <div id="viewer-meta" class="viewer-meta"></div>
+    <div class="row">
+      <button class="btn" data-action="download-look">⬇ Download</button>
+      <button class="btn" data-action="regen-look">↻ Regenerate</button>
+      <span class="spacer"></span>
+      <button class="btn danger" data-action="del-look">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<input type="file" id="file-input" accept="image/*" multiple hidden>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
