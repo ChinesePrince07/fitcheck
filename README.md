@@ -20,12 +20,11 @@ cd ~/fitcheck && python3 -m http.server 4173
 2. Open the app → ⚙ Settings → paste key → Test key → Save.
    (The key is stored in this browser's localStorage — never in the code or git.)
 
-## Models & cost per look
+## Model & cost
 
-| Model | Setting | Cost |
-|---|---|---|
-| Nano Banana 2 (`gemini-3.1-flash-image`) | default | ~$0.067 (1K) / ~$0.101 (2K) |
-| Nano Banana Pro (`gemini-3-pro-image`) | settings toggle | ~$0.134 (1K/2K) |
+Always generates with **Nano Banana Pro** (`gemini-3-pro-image`) at **4K** — the best model and highest resolution available. **~$0.24 per look**, ~30–60s each. No quality selector; it's always maxed.
+
+Categories include a **Whole set** slot: drop in one photo of a complete outfit (a flat-lay with the shirt + pants, or someone else's fit) and it dresses you in the entire look — it uses only the clothing from that photo, never the other person's face or body.
 
 ## Tips
 

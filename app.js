@@ -7,6 +7,7 @@
 /* ============================== config ============================== */
 
 const CATS = [
+  { key: 'wholeset', label: 'Whole set',      icon: '🧍', verb: 'Dress the person in the COMPLETE outfit shown in this image — every garment, layer and accessory visible in it, reproduced exactly. If another person is shown wearing it, copy ONLY their clothing and accessories, never their face, body or identity' },
   { key: 'top',      label: 'Tops',           icon: '👕', verb: 'Replace their current top/shirt with this exact garment' },
   { key: 'bottom',   label: 'Bottoms',        icon: '👖', verb: 'Replace their current pants/bottoms with this exact garment' },
   { key: 'outer',    label: 'Outerwear',      icon: '🧥', verb: 'Layer this exact jacket/outerwear naturally over their top' },
@@ -23,10 +24,11 @@ const MODEL_NAMES = {
   'gemini-3.1-flash-image': 'Nano Banana 2',
   'gemini-3-pro-image': 'Nano Banana Pro',
 };
+// Always use the best model + highest resolution available (no in-app selection).
+const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — strongest identity preservation for try-on
+const BEST_IMAGE_SIZE = '4K';              // highest resolution Pro supports (verified 3584×4800)
 const DEFAULT_SETTINGS = {
   provider: 'gemini',
-  model: 'gemini-3.1-flash-image',
-  imageSize: '1K',
   apiKey: '',
 };
 
@@ -188,7 +190,10 @@ function geminiHttpError(status, json) {
     if (/leaked/i.test(msg)) return new Error('Google flagged this API key as leaked — create a fresh one.');
     return new Error('Permission denied (' + status + '). Is billing enabled for this key? Image models have no free tier.');
   }
-  if (status === 429) return new Error('Rate/quota limit hit (429) — wait a moment and try again.');
+  if (status === 429) {
+    if (/credit|billing|depleted|prepay/i.test(msg)) return new Error('Your Google API credits are depleted — top up billing at ai.studio/projects, then try again.');
+    return new Error('Rate limit hit (429) — wait a moment and try again.');
+  }
   if (status === 404) return new Error('Model not found (404) — it may have been renamed; check Settings.');
   if (status >= 500) return new Error('Google-side error (' + status + ') — try again in a moment.');
   return new Error('API error ' + status + (msg ? ': ' + msg.slice(0, 180) : ''));
@@ -310,21 +315,18 @@ function renderLooks() {
 }
 
 function renderOutfitBar() {
-  const s = getSettings();
   const selItems = [...state.sel.entries()]
     .map(([cat, id]) => state.items.find(i => i.id === id))
     .filter(Boolean);
   const chips = selItems.length
     ? selItems.map(i => `<span class="chip">${catByKey(i.cat).icon} ${esc(i.name || catByKey(i.cat).label)} <span class="x" data-action="unselect-chip" data-cat="${i.cat}">✕</span></span>`).join('')
     : `<span class="chip placeholder">nothing selected yet — tap items in your wardrobe</span>`;
-  const modelShort = (MODEL_NAMES[s.model] || s.model).replace('Nano Banana', 'NB');
-
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <button class="model-badge" data-action="open-settings" title="Change model">${esc(modelShort)} · ${esc(s.imageSize)}</button>
+    <span class="model-badge" title="Always generates at the best quality available">✨ Nano Banana Pro · 4K</span>
     ${state.generating
-      ? `<span class="gen-status"><span class="spinner"></span> ${esc(MODEL_NAMES[s.model] || 'The model')} is cooking your fit… 10–30s</span>
+      ? `<span class="gen-status"><span class="spinner"></span> Rendering at 4K on Nano Banana Pro… ~30–60s</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
       : `<button class="btn primary" id="generate-btn" data-action="generate">✨ Generate fit</button>`}
   </div>`;
@@ -359,8 +361,6 @@ function openViewer(lookId) {
 function openSettings() {
   const s = getSettings();
   $('#set-key').value = s.apiKey;
-  $('#set-model').value = s.model;
-  $('#set-size').value = s.imageSize;
   $('#test-key-result').textContent = '';
   $('#test-key-result').className = 'test-result';
   $('#settings-modal').classList.add('open');
@@ -417,13 +417,13 @@ async function generate() {
   const t0 = Date.now();
   try {
     const out = await PROVIDERS[s.provider].generate({
-      apiKey: s.apiKey, model: s.model, imageSize: s.imageSize,
+      apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
       person, items, notes: state.notes, signal: state.abort.signal,
     });
     const look = {
       id: uid(), dataUrl: out.dataUrl,
       items: items.map(i => ({ id: i.id, cat: i.cat, name: i.name })),
-      notes: state.notes, model: s.model, size: s.imageSize,
+      notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
       ms: Date.now() - t0, createdAt: Date.now(),
     };
     await dbPut('looks', look);
@@ -562,8 +562,6 @@ document.addEventListener('click', e => {
     case 'save-settings': {
       const s = getSettings();
       s.apiKey = $('#set-key').value.trim();
-      s.model = $('#set-model').value;
-      s.imageSize = $('#set-size').value;
       saveSettings(s);
       closeModals();
       renderOutfitBar(); renderBanner();
