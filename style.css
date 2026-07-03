@@ -209,6 +209,7 @@ section { margin: 40px 0; }
 .chip .x { cursor: pointer; color: var(--gold-br); }
 .chip .x:hover { color: #e7c987; }
 .outfit-bar .chip.placeholder { border-style: dashed; color: rgba(242,236,221,.6); background: transparent; }
+.cap-note { align-self: center; color: var(--gold-br); font-size: 10.5px; letter-spacing: .06em; opacity: .85; font-style: italic; }
 .notes {
   background: rgba(242,236,221,.94); border: 1px solid var(--gold); color: var(--ink);
   border-radius: 2px; padding: 9px 13px; font-family: var(--sans); font-size: 13px; width: 230px;

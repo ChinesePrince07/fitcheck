@@ -8,11 +8,11 @@
 
 const CATS = [
   { key: 'wholeset', label: 'Whole set',      icon: '🧍', verb: 'Dress the person in the COMPLETE outfit shown in this image — every garment, layer and accessory visible in it, reproduced exactly. If another person is shown wearing it, copy ONLY their clothing and accessories, never their face, body or identity' },
-  { key: 'top',      label: 'Tops',           icon: '👕', verb: 'Replace their current top/shirt with this exact garment' },
-  { key: 'bottom',   label: 'Bottoms',        icon: '👖', verb: 'Replace their current pants/bottoms with this exact garment' },
+  { key: 'top',      label: 'Tops',           icon: '👕', verb: 'Completely remove the subject\'s original top and dress them in this exact garment instead — none of the old top (collar, sleeves, hem) may remain visible' },
+  { key: 'bottom',   label: 'Bottoms',        icon: '👖', verb: 'Completely remove the subject\'s original bottoms and dress them in these exact bottoms instead — none of the old pair may remain visible' },
   { key: 'outer',    label: 'Outerwear',      icon: '🧥', verb: 'Layer this exact jacket/outerwear naturally over their top' },
   { key: 'hat',      label: 'Hats & Beanies', icon: '🧢', verb: 'Place this exact hat/beanie naturally on their head' },
-  { key: 'shoes',    label: 'Shoes',          icon: '👟', verb: 'Replace their footwear with this exact pair of shoes' },
+  { key: 'shoes',    label: 'Shoes',          icon: '👟', verb: 'Remove the subject\'s original footwear entirely and put them in this exact pair instead' },
   { key: 'necklace', label: 'Necklaces',      icon: '📿', verb: 'Add this exact necklace around their neck, resting naturally' },
   { key: 'watch',    label: 'Watches',        icon: '⌚', verb: 'Place this exact watch on their wrist' },
   { key: 'bracelet', label: 'Bracelets',      icon: '🔗', verb: 'Add this exact bracelet on their wrist' },
@@ -60,10 +60,11 @@ const state = {
   items: [],
   looks: [],
   activePhotoId: localStorage.getItem('fitcheck.activePhoto') || null,
-  sel: new Map(),          // category key -> item id
+  sel: new Map(),          // category key -> Set of selected item ids (multi-select for mix & match)
   hairPreset: null,        // hairstyle preset id (mutually exclusive with a selected hair reference image)
   notes: '',
   generating: false,
+  genProgress: null,       // { i, total } while a batch is running
   abort: null,
   uploadCat: null,         // null => uploading a photo of you
   currentLookId: null,     // look open in viewer
@@ -77,6 +78,39 @@ function getSettings() {
 }
 function saveSettings(s) {
   localStorage.setItem('fitcheck.settings', JSON.stringify(s));
+}
+
+/* ============================== selection (mix & match) ============================== */
+
+const MAX_LOOKS_PER_RUN = 20;   // safety cap on a single mix-and-match batch
+const COST_PER_LOOK = 0.24;     // Nano Banana Pro @ 4K
+
+const selSet = cat => state.sel.get(cat) || new Set();
+function toggleSel(cat, id) {
+  const s = state.sel.get(cat) || new Set();
+  s.has(id) ? s.delete(id) : s.add(id);
+  if (s.size) state.sel.set(cat, s); else state.sel.delete(cat);
+}
+function selectedItems() {   // flat list of every selected wardrobe item
+  const out = [];
+  for (const [, set] of state.sel) for (const id of set) { const it = state.items.find(i => i.id === id); if (it) out.push(it); }
+  return out;
+}
+/* Cartesian product across categories with selections → one outfit per combination.
+   Returns [[]] (a single empty outfit) when nothing is selected — used for hairstyle-only runs. */
+function buildCombos() {
+  const lists = [];
+  for (const c of CATS) {
+    const set = state.sel.get(c.key);
+    if (set && set.size) lists.push([...set].map(id => state.items.find(i => i.id === id)).filter(Boolean));
+  }
+  let combos = [[]];
+  for (const list of lists) combos = combos.flatMap(cmb => list.map(it => [...cmb, it]));
+  return combos;
+}
+function comboCount() {
+  if (!selectedItems().length && !state.hairPreset) return 0;
+  return buildCombos().length;   // hairstyle-only => 1 (the empty outfit)
 }
 
 /* ============================== IndexedDB ============================== */
@@ -203,7 +237,7 @@ Change ONLY the following, nothing else:
 
 ${changes.join('\n')}
 
-Each new garment or accessory must keep its exact design, colour, pattern, texture and material from its reference image. Anything not listed above stays exactly as in Image 1. Blend every change in photorealistically — natural fit, draping, wrinkles, contact shadows and lighting consistent with Image 1. Output only the final edited photograph of the subject.`;
+Where a garment is replaced, FULLY REMOVE the subject's original piece first — none of the original clothing being replaced may remain visible, peek out at the collar, cuffs, sleeves, hem or waist, or show through underneath the new item. Each new garment or accessory must keep its exact design, colour, pattern, texture and material from its reference image. Anything not listed above stays exactly as in Image 1. Blend every change in photorealistically — natural fit, draping, wrinkles, contact shadows and lighting consistent with Image 1. Output only the final edited photograph of the subject.`;
   if (notes && notes.trim()) p += `\n\nStyling notes: ${notes.trim()}`;
   return p;
 }
@@ -314,16 +348,15 @@ function renderPhotos() {
 function renderCats() {
   $('#categories').innerHTML = CATS.filter(c => c.key !== 'hair').map(cat => {
     const items = state.items.filter(i => i.cat === cat.key);
-    const selId = state.sel.get(cat.key);
-    const picked = items.find(i => i.id === selId);
+    const set = selSet(cat.key);
     return `<div class="cat" data-cat="${cat.key}">
       <div class="cat-head">
         <h3>${cat.icon} ${cat.label}</h3>
         <span class="count">${items.length ? items.length + ' item' + (items.length > 1 ? 's' : '') : ''}</span>
-        ${picked ? `<span class="picked">wearing: ${esc(picked.name || 'selected')}</span>` : ''}
+        ${set.size ? `<span class="picked">${set.size} selected</span>` : ''}
       </div>
       <div class="grid">
-        ${items.map(i => tileHtml(i, { selected: i.id === selId, kind: 'item' })).join('')}
+        ${items.map(i => tileHtml(i, { selected: set.has(i.id), kind: 'item' })).join('')}
         <button class="tile add" data-action="add-item" data-cat="${cat.key}"><span class="plus">＋</span><span>Add ${cat.label.toLowerCase()}</span></button>
       </div>
     </div>`;
@@ -332,12 +365,12 @@ function renderCats() {
 
 function renderHair() {
   const imgs = state.items.filter(i => i.cat === 'hair');
-  const selImg = state.sel.get('hair');
+  const sel = selSet('hair');
   $('#hair-presets').innerHTML = HAIR_PRESETS.map(p =>
     `<button class="hair-preset ${state.hairPreset === p.id ? 'selected' : ''}" data-action="select-hairpreset" data-preset="${p.id}">${esc(p.label)}</button>`
   ).join('');
   $('#hair-grid').innerHTML =
-    imgs.map(i => tileHtml(i, { selected: i.id === selImg, kind: 'item' })).join('') +
+    imgs.map(i => tileHtml(i, { selected: sel.has(i.id), kind: 'item' })).join('') +
     `<button class="tile add" data-action="add-item" data-cat="hair"><span class="plus">＋</span><span>Upload a cut</span></button>`;
 }
 
@@ -355,10 +388,7 @@ function renderLooks() {
 }
 
 function renderOutfitBar() {
-  const selItems = [...state.sel.entries()]
-    .map(([cat, id]) => state.items.find(i => i.id === id))
-    .filter(Boolean);
-  const chipEls = selItems.map(i => `<span class="chip">${catByKey(i.cat).icon} ${esc(i.name || catByKey(i.cat).label)} <span class="x" data-action="unselect-chip" data-cat="${i.cat}">✕</span></span>`);
+  const chipEls = selectedItems().map(i => `<span class="chip">${catByKey(i.cat).icon} ${esc(i.name || catByKey(i.cat).label)} <span class="x" data-action="unselect-chip" data-cat="${i.cat}" data-id="${i.id}">✕</span></span>`);
   if (state.hairPreset) {
     const p = hairPresetById(state.hairPreset);
     chipEls.unshift(`<span class="chip">💇 ${esc(p?.label || 'Hairstyle')} <span class="x" data-action="clear-hairpreset">✕</span></span>`);
@@ -366,14 +396,18 @@ function renderOutfitBar() {
   const chips = chipEls.length
     ? chipEls.join('')
     : `<span class="chip placeholder">nothing selected yet — pick items or a hairstyle</span>`;
+  const raw = comboCount();
+  const n = Math.min(raw, MAX_LOOKS_PER_RUN);
+  const label = n <= 1 ? '✨ Generate fit' : `✨ Generate ${n} looks · ~$${(n * COST_PER_LOOK).toFixed(2)}`;
+  const capNote = raw > MAX_LOOKS_PER_RUN ? `<span class="cap-note">${raw} combinations — will render the first ${MAX_LOOKS_PER_RUN}</span>` : '';
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
-    <div class="chips">${chips}</div>
+    <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
     <span class="model-badge" title="Always generates at the best quality available">✨ Nano Banana Pro · 4K</span>
     ${state.generating
-      ? `<span class="gen-status"><span class="spinner"></span> Rendering at 4K on Nano Banana Pro… ~30–60s</span>
+      ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
-      : `<button class="btn primary" id="generate-btn" data-action="generate">✨ Generate fit</button>`}
+      : `<button class="btn primary" id="generate-btn" data-action="generate"${n === 0 ? ' disabled' : ''}>${label}</button>`}
   </div>`;
 }
 
@@ -455,36 +489,51 @@ async function generate() {
   if (!s.apiKey) { openSettings(); toast('Add your Gemini API key first (billing enabled — image models have no free tier).', 'err'); return; }
   const person = state.photos.find(p => p.id === state.activePhotoId);
   if (!person) { toast('Add a photo of yourself first (section 1).', 'err'); return; }
-  const items = [...state.sel.entries()].map(([, id]) => state.items.find(i => i.id === id)).filter(Boolean);
-  if (!items.length && !state.hairPreset) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
+  if (!selectedItems().length && !state.hairPreset) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
+
+  let combos = buildCombos();                       // [[]] for a hairstyle-only run
+  const capped = combos.length > MAX_LOOKS_PER_RUN;
+  if (capped) combos = combos.slice(0, MAX_LOOKS_PER_RUN);
+  const total = combos.length;
 
   state.generating = true;
   state.abort = new AbortController();
-  renderOutfitBar();
-  const t0 = Date.now();
-  try {
-    const out = await PROVIDERS[s.provider].generate({
-      apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
-      person, items, notes: state.notes, hairPreset: state.hairPreset, signal: state.abort.signal,
-    });
-    const look = {
-      id: uid(), dataUrl: out.dataUrl,
-      items: items.map(i => ({ id: i.id, cat: i.cat, name: i.name })),
-      hairPreset: state.hairPreset, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
-      ms: Date.now() - t0, createdAt: Date.now(),
-    };
-    await dbPut('looks', look);
-    state.looks.unshift(look);
-    renderLooks();
-    openViewer(look.id);
-  } catch (e) {
-    if (e.name === 'AbortError') toast('Generation cancelled.');
-    else { console.error('FitCheck generate failed:', e); toast(e.message || 'Generation failed.', 'err'); }
-  } finally {
-    state.generating = false;
-    state.abort = null;
+  let done = 0, failed = 0, aborted = false, firstId = null;
+  for (let idx = 0; idx < combos.length; idx++) {
+    if (state.abort.signal.aborted) { aborted = true; break; }
+    state.genProgress = { i: idx + 1, total };
     renderOutfitBar();
+    const comboItems = combos[idx];
+    const t0 = Date.now();
+    try {
+      const out = await PROVIDERS[s.provider].generate({
+        apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
+        person, items: comboItems, notes: state.notes, hairPreset: state.hairPreset, signal: state.abort.signal,
+      });
+      const look = {
+        id: uid(), dataUrl: out.dataUrl,
+        items: comboItems.map(i => ({ id: i.id, cat: i.cat, name: i.name })),
+        hairPreset: state.hairPreset, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
+        ms: Date.now() - t0, createdAt: Date.now(),
+      };
+      await dbPut('looks', look);
+      state.looks.unshift(look);
+      firstId ||= look.id;
+      renderLooks();
+      done++;
+    } catch (e) {
+      if (e.name === 'AbortError') { aborted = true; break; }
+      console.error('FitCheck generate failed:', e);
+      toast(total > 1 ? `Look ${idx + 1}/${total}: ${e.message || 'failed'}` : (e.message || 'Generation failed.'), 'err');
+      failed++;
+    }
   }
+  state.generating = false; state.abort = null; state.genProgress = null;
+  renderOutfitBar();
+
+  if (aborted) toast(`Stopped after ${done} look${done === 1 ? '' : 's'}.`);
+  else if (total === 1 && done === 1) openViewer(firstId);
+  else if (done) toast(`Rendered ${done} look${done === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}${capped ? ` (capped at ${MAX_LOOKS_PER_RUN})` : ''} — see the Lookbook.`);
 }
 
 function regenerateFromLook(lookId) {
@@ -493,7 +542,7 @@ function regenerateFromLook(lookId) {
   state.sel.clear();
   let missing = 0;
   for (const it of look.items) {
-    if (state.items.some(i => i.id === it.id)) state.sel.set(it.cat, it.id);
+    if (state.items.some(i => i.id === it.id)) { const s = state.sel.get(it.cat) || new Set(); s.add(it.id); state.sel.set(it.cat, s); }
     else missing++;
   }
   state.hairPreset = look.hairPreset || null;
@@ -556,16 +605,21 @@ document.addEventListener('click', e => {
     case 'select-item': {
       const item = state.items.find(i => i.id === id);
       if (!item) break;
-      if (state.sel.get(item.cat) === id) state.sel.delete(item.cat);
-      else { state.sel.set(item.cat, id); if (item.cat === 'hair') state.hairPreset = null; }
+      toggleSel(item.cat, id);
+      if (item.cat === 'hair' && selSet('hair').size) state.hairPreset = null;
       renderCats(); renderHair(); renderOutfitBar();
       break;
     }
-    case 'unselect-chip': state.sel.delete(cat); renderCats(); renderHair(); renderOutfitBar(); break;
+    case 'unselect-chip': {
+      const set = state.sel.get(cat);
+      if (set) { set.delete(id); if (!set.size) state.sel.delete(cat); }
+      renderCats(); renderHair(); renderOutfitBar();
+      break;
+    }
     case 'select-hairpreset': {
       const p = el.dataset.preset;
       state.hairPreset = state.hairPreset === p ? null : p;
-      if (state.hairPreset) state.sel.delete('hair'); // preset & reference image are mutually exclusive
+      if (state.hairPreset) state.sel.delete('hair'); // preset & reference images are mutually exclusive
       renderHair(); renderOutfitBar();
       break;
     }
@@ -588,7 +642,8 @@ document.addEventListener('click', e => {
         const item = state.items.find(i => i.id === id);
         await dbDel('items', id);
         state.items = state.items.filter(i => i.id !== id);
-        if (item && state.sel.get(item.cat) === id) state.sel.delete(item.cat);
+        const set = item && state.sel.get(item.cat);
+        if (set) { set.delete(id); if (!set.size) state.sel.delete(item.cat); }
         renderCats(); renderHair(); renderOutfitBar();
       });
       break;
