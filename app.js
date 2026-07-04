@@ -23,7 +23,7 @@ const catByKey = k => CATS.find(c => c.key === k) || CATS[CATS.length - 1];
 
 // Hairstyle try-on: pick a preset (text) OR upload a reference photo of a cut. Rendered in its own section.
 const HAIR_PRESETS = [
-  { id: 'buzz',     label: 'Buzz cut',       desc: 'a very short, even buzz cut' },
+  { id: 'buzz',     label: 'Buzz cut',       desc: 'a very short, uniform buzz cut — evenly clipped short hair over the whole scalp, with a clean and natural hairline, keeping the head shape realistic' },
   { id: 'crew',     label: 'Crew cut',       desc: 'a classic short crew cut, tapered at the sides' },
   { id: 'ivy',      label: 'Ivy League',     desc: 'a neat Ivy League cut with a clean side part and short tapered sides' },
   { id: 'slick',    label: 'Slicked back',   desc: 'hair slicked straight back, glossy and refined' },
@@ -44,7 +44,7 @@ const MODEL_NAMES = {
 };
 // Always use the best model + highest resolution available (no in-app selection).
 const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — strongest identity preservation for try-on
-const BEST_IMAGE_SIZE = '4K';              // highest resolution Pro supports (verified 3584×4800)
+const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and lighter on mobile (was 4K)
 const DEFAULT_SETTINGS = {
   provider: 'gemini',
   apiKey: '',
@@ -61,7 +61,7 @@ const state = {
   looks: [],
   activePhotoId: localStorage.getItem('fitcheck.activePhoto') || null,
   sel: new Map(),          // category key -> Set of selected item ids (multi-select for mix & match)
-  hairPreset: null,        // hairstyle preset id (mutually exclusive with a selected hair reference image)
+  hairPresets: new Set(),  // selected hairstyle preset ids (multi-select; each becomes its own combination)
   notes: '',
   generating: false,
   genProgress: null,       // { i, total } while a batch is running
@@ -91,7 +91,7 @@ function canGenerate() { return !!getSettings().apiKey || proxyAvailable(); }
 /* ============================== selection (mix & match) ============================== */
 
 const MAX_LOOKS_PER_RUN = 20;   // safety cap on a single mix-and-match batch
-const COST_PER_LOOK = 0.24;     // Nano Banana Pro @ 4K
+const COST_PER_LOOK = 0.14;     // Nano Banana Pro @ ~1080p
 
 const selSet = cat => state.sel.get(cat) || new Set();
 function toggleSel(cat, id) {
@@ -104,21 +104,38 @@ function selectedItems() {   // flat list of every selected wardrobe item
   for (const [, set] of state.sel) for (const id of set) { const it = state.items.find(i => i.id === id); if (it) out.push(it); }
   return out;
 }
-/* Cartesian product across categories with selections → one outfit per combination.
-   Returns [[]] (a single empty outfit) when nothing is selected — used for hairstyle-only runs. */
+function anySelection() {
+  return selectedItems().length > 0 || state.hairPresets.size > 0;
+}
+/* Cartesian product across every category (and the hairstyle dimension) that has a
+   selection → one outfit per combination. Each combo is { items, hairPreset }.
+   The hairstyle dimension = selected presets + selected hair-reference images, so
+   picking several haircuts multiplies the looks just like several tops would. */
 function buildCombos() {
-  const lists = [];
+  const dims = [];
   for (const c of CATS) {
+    if (c.key === 'hair') continue;                          // hair is its own dimension, below
     const set = state.sel.get(c.key);
-    if (set && set.size) lists.push([...set].map(id => state.items.find(i => i.id === id)).filter(Boolean));
+    if (set?.size) dims.push([...set].map(id => state.items.find(i => i.id === id)).filter(Boolean).map(it => ({ item: it })));
   }
-  let combos = [[]];
-  for (const list of lists) combos = combos.flatMap(cmb => list.map(it => [...cmb, it]));
+  const hairOpts = [
+    ...[...state.hairPresets].map(id => ({ hairPreset: id })),
+    ...[...selSet('hair')].map(id => state.items.find(i => i.id === id)).filter(Boolean).map(it => ({ item: it })),
+  ];
+  if (hairOpts.length) dims.push(hairOpts);
+
+  let combos = [{ items: [], hairPreset: null }];
+  for (const dim of dims) {
+    combos = combos.flatMap(base => dim.map(opt => ({
+      items: opt.item ? [...base.items, opt.item] : base.items,
+      hairPreset: opt.hairPreset ?? base.hairPreset,
+    })));
+  }
   return combos;
 }
 function comboCount() {
-  if (!selectedItems().length && !state.hairPreset) return 0;
-  return buildCombos().length;   // hairstyle-only => 1 (the empty outfit)
+  if (!anySelection()) return 0;
+  return buildCombos().length;   // hairstyle-only => number of chosen haircuts
 }
 
 /* ============================== IndexedDB ============================== */
@@ -134,37 +151,40 @@ function db() {
         }
       }
     };
-    req.onsuccess = () => res(req.result);
-    req.onerror = () => rej(req.error);
+    req.onsuccess = () => {
+      const d = req.result;
+      // mobile browsers force-close the connection when the tab is backgrounded;
+      // drop our cached handle so the next op transparently reopens it.
+      d.onclose = () => { _db = null; };
+      d.onversionchange = () => { try { d.close(); } catch {} _db = null; };
+      res(d);
+    };
+    req.onerror = () => { _db = null; rej(req.error); };
   });
   return _db;
 }
-async function dbPut(store, val) {
-  const d = await db();
-  return new Promise((res, rej) => {
-    const t = d.transaction(store, 'readwrite');
-    t.objectStore(store).put(val);
-    t.oncomplete = () => res(val);
-    t.onerror = () => rej(t.error);
-  });
+/* Runs one transaction; if the connection was closed (backgrounded tab) it reopens and retries once. */
+async function dbTxn(store, mode, fn, retry = true) {
+  try {
+    const d = await db();
+    return await new Promise((res, rej) => {
+      const t = d.transaction(store, mode);
+      const req = fn(t.objectStore(store));
+      t.oncomplete = () => res(req ? req.result : undefined);
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error || new Error('idb transaction aborted'));
+    });
+  } catch (e) {
+    _db = null;   // discard the possibly-closed connection
+    if (retry && /clos|invalidstate|abort|not allowed|unknown/i.test(String(e?.name) + String(e?.message))) {
+      return dbTxn(store, mode, fn, false);
+    }
+    throw e;
+  }
 }
-async function dbDel(store, id) {
-  const d = await db();
-  return new Promise((res, rej) => {
-    const t = d.transaction(store, 'readwrite');
-    t.objectStore(store).delete(id);
-    t.oncomplete = () => res();
-    t.onerror = () => rej(t.error);
-  });
-}
-async function dbAll(store) {
-  const d = await db();
-  return new Promise((res, rej) => {
-    const r = d.transaction(store).objectStore(store).getAll();
-    r.onsuccess = () => res(r.result || []);
-    r.onerror = () => rej(r.error);
-  });
-}
+const dbPut = (store, val) => dbTxn(store, 'readwrite', s => s.put(val)).then(() => val);
+const dbDel = (store, id) => dbTxn(store, 'readwrite', s => s.delete(id));
+const dbAll = (store) => dbTxn(store, 'readonly', s => s.getAll()).then(r => r || []);
 
 /* ============================== utils ============================== */
 
@@ -228,9 +248,19 @@ function nearestAspect(w, h) {
 /* ============================== prompt ============================== */
 
 function buildPrompt(items, notes, hairPreset) {
-  const changes = items.map((it, i) => `- Image ${i + 2} (${catByKey(it.cat).label.toLowerCase()}): ${catByKey(it.cat).verb}.`);
+  // individual garments (not the whole-set reference, not hair) override their piece of a whole set
+  const overrideLabels = [...new Set(items.filter(i => i.cat !== 'wholeset' && i.cat !== 'hair').map(i => catByKey(i.cat).label.toLowerCase()))];
+  const listPhrase = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+
+  const changes = items.map((it, i) => {
+    let verb = catByKey(it.cat).verb;
+    if (it.cat === 'wholeset' && overrideLabels.length) {
+      verb += `. Use this outfit as the base, BUT the ${listPhrase(overrideLabels)} given separately below REPLACE those pieces of it — use the separate item(s) for those and keep everything else from this outfit`;
+    }
+    return `- Image ${i + 2} (${catByKey(it.cat).label.toLowerCase()}): ${verb}.`;
+  });
   const preset = hairPreset ? hairPresetById(hairPreset) : null;
-  if (preset) changes.push(`- Hairstyle: restyle the subject's hair to ${preset.desc}, adapting it naturally to their head, while keeping their face unchanged.`);
+  if (preset) changes.push(`- Hairstyle: restyle the subject's hair to ${preset.desc}, adapting it naturally to their head and hairline, while keeping their face, ears and head shape unchanged.`);
   const hairChanging = preset || items.some(it => it.cat === 'hair');
 
   const locked = ['face', 'facial features', 'bone structure', 'jawline', 'eyes', 'nose', 'mouth',
@@ -373,7 +403,7 @@ function renderHair() {
   const imgs = state.items.filter(i => i.cat === 'hair');
   const sel = selSet('hair');
   $('#hair-presets').innerHTML = HAIR_PRESETS.map(p =>
-    `<button class="hair-preset ${state.hairPreset === p.id ? 'selected' : ''}" data-action="select-hairpreset" data-preset="${p.id}">${esc(p.label)}</button>`
+    `<button class="hair-preset ${state.hairPresets.has(p.id) ? 'selected' : ''}" data-action="select-hairpreset" data-preset="${p.id}">${esc(p.label)}</button>`
   ).join('');
   $('#hair-grid').innerHTML =
     imgs.map(i => tileHtml(i, { selected: sel.has(i.id), kind: 'item' })).join('') +
@@ -395,9 +425,9 @@ function renderLooks() {
 
 function renderOutfitBar() {
   const chipEls = selectedItems().map(i => `<span class="chip">${catByKey(i.cat).icon} ${esc(i.name || catByKey(i.cat).label)} <span class="x" data-action="unselect-chip" data-cat="${i.cat}" data-id="${i.id}">✕</span></span>`);
-  if (state.hairPreset) {
-    const p = hairPresetById(state.hairPreset);
-    chipEls.unshift(`<span class="chip">💇 ${esc(p?.label || 'Hairstyle')} <span class="x" data-action="clear-hairpreset">✕</span></span>`);
+  for (const pid of state.hairPresets) {
+    const p = hairPresetById(pid);
+    chipEls.unshift(`<span class="chip">💇 ${esc(p?.label || 'Hairstyle')} <span class="x" data-action="unselect-hairpreset" data-preset="${pid}">✕</span></span>`);
   }
   const chips = chipEls.length
     ? chipEls.join('')
@@ -409,7 +439,7 @@ function renderOutfitBar() {
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <span class="model-badge" title="Always generates at the best quality available">✨ Nano Banana Pro · 4K</span>
+    <span class="model-badge" title="Always generates on the best model available">✨ Nano Banana Pro · 1080p</span>
     ${state.generating
       ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
@@ -474,15 +504,14 @@ async function handleFiles(files) {
         localStorage.setItem('fitcheck.activePhoto', rec.id);
       } else {
         const { dataUrl } = await resizeFile(file, ITEM_MAX_DIM);
-        const name = (file.name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ').trim();
-        const rec = { id: uid(), cat, dataUrl, name, createdAt: Date.now() };
+        const rec = { id: uid(), cat, dataUrl, createdAt: Date.now() };   // no filename kept
         await dbPut('items', rec);
         state.items.push(rec);
       }
       ok++;
     } catch (e) {
       console.warn('FitCheck upload failed:', e);
-      toast(`Couldn't read "${file.name}" — HEIC isn't supported here, try JPEG/PNG.`, 'err');
+      toast("Couldn't read that image — HEIC isn't supported here, try JPEG/PNG.", 'err');
     }
   }
   if (ok) toast(cat === null ? `Added ${ok} photo${ok > 1 ? 's' : ''} of you` : `Added ${ok} item${ok > 1 ? 's' : ''}`);
@@ -495,9 +524,9 @@ async function generate() {
   if (!canGenerate()) { openSettings(); toast('Add your Gemini API key first (billing enabled — image models have no free tier).', 'err'); return; }
   const person = state.photos.find(p => p.id === state.activePhotoId);
   if (!person) { toast('Add a photo of yourself first (section 1).', 'err'); return; }
-  if (!selectedItems().length && !state.hairPreset) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
+  if (!anySelection()) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
 
-  let combos = buildCombos();                       // [[]] for a hairstyle-only run
+  let combos = buildCombos();                       // array of { items, hairPreset }
   const capped = combos.length > MAX_LOOKS_PER_RUN;
   if (capped) combos = combos.slice(0, MAX_LOOKS_PER_RUN);
   const total = combos.length;
@@ -509,17 +538,17 @@ async function generate() {
     if (state.abort.signal.aborted) { aborted = true; break; }
     state.genProgress = { i: idx + 1, total };
     renderOutfitBar();
-    const comboItems = combos[idx];
+    const combo = combos[idx];
     const t0 = Date.now();
     try {
       const out = await PROVIDERS[s.provider].generate({
         apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
-        person, items: comboItems, notes: state.notes, hairPreset: state.hairPreset, signal: state.abort.signal,
+        person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, signal: state.abort.signal,
       });
       const look = {
         id: uid(), dataUrl: out.dataUrl,
-        items: comboItems.map(i => ({ id: i.id, cat: i.cat, name: i.name })),
-        hairPreset: state.hairPreset, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
+        items: combo.items.map(i => ({ id: i.id, cat: i.cat })),
+        hairPreset: combo.hairPreset, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
         ms: Date.now() - t0, createdAt: Date.now(),
       };
       await dbPut('looks', look);
@@ -551,11 +580,11 @@ function regenerateFromLook(lookId) {
     if (state.items.some(i => i.id === it.id)) { const s = state.sel.get(it.cat) || new Set(); s.add(it.id); state.sel.set(it.cat, s); }
     else missing++;
   }
-  state.hairPreset = look.hairPreset || null;
+  state.hairPresets = new Set(look.hairPreset ? [look.hairPreset] : []);
   state.notes = look.notes || '';
   closeModals();
   renderAll();
-  if (!state.sel.size && !state.hairPreset) { toast('The items from this look were deleted from your wardrobe — can\'t regenerate.', 'err'); return; }
+  if (!state.sel.size && !state.hairPresets.size) { toast('The items from this look were deleted from your wardrobe — can\'t regenerate.', 'err'); return; }
   if (missing) toast(`${missing} item${missing > 1 ? 's were' : ' was'} deleted since — regenerating with the rest.`);
   generate();
 }
@@ -612,7 +641,6 @@ document.addEventListener('click', e => {
       const item = state.items.find(i => i.id === id);
       if (!item) break;
       toggleSel(item.cat, id);
-      if (item.cat === 'hair' && selSet('hair').size) state.hairPreset = null;
       renderCats(); renderHair(); renderOutfitBar();
       break;
     }
@@ -624,12 +652,11 @@ document.addEventListener('click', e => {
     }
     case 'select-hairpreset': {
       const p = el.dataset.preset;
-      state.hairPreset = state.hairPreset === p ? null : p;
-      if (state.hairPreset) state.sel.delete('hair'); // preset & reference images are mutually exclusive
+      state.hairPresets.has(p) ? state.hairPresets.delete(p) : state.hairPresets.add(p);
       renderHair(); renderOutfitBar();
       break;
     }
-    case 'clear-hairpreset': state.hairPreset = null; renderHair(); renderOutfitBar(); break;
+    case 'unselect-hairpreset': state.hairPresets.delete(el.dataset.preset); renderHair(); renderOutfitBar(); break;
     case 'del-photo':
       e.stopPropagation();
       armThen(el, async () => {
@@ -694,6 +721,12 @@ document.addEventListener('input', e => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModals();
+});
+
+// mobile: after the tab is backgrounded and restored, re-render from in-memory state
+// (the IndexedDB connection is reopened lazily by dbTxn) so the UI can't get stuck.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !state.generating) renderAll();
 });
 
 $('#file-input').addEventListener('change', async e => {

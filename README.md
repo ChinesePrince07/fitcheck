@@ -23,7 +23,7 @@ Upload a photo of yourself and photos of the clothes you're considering (screens
 
 ## The model
 
-It uses Google's **Nano Banana Pro** (`gemini-3-pro-image`) at 4K. In my testing it was the best at keeping your face and body consistent while changing only the clothes, which is the hard part. Each look costs roughly **$0.24** and takes about 30–60 seconds.
+It uses Google's **Nano Banana Pro** (`gemini-3-pro-image`) at 1080p. In my testing it was the best at keeping your face and body consistent while changing only the clothes, which is the hard part. Each look costs roughly **$0.14** and takes about 20–40 seconds.
 
 ## Running it
 
