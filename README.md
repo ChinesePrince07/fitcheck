@@ -2,6 +2,8 @@
 
 See how clothes look on you before you buy them.
 
+**Live at [fitcheck.andypandy.org](https://fitcheck.andypandy.org).**
+
 I kept ordering things online that looked great on the model and landed badly on me, so I built this to put the clothes on a photo of *me* first. It uses AI image generation to show the fit before I commit to buying.
 
 ![The FitCheck app](assets/hero.png)
