@@ -38,6 +38,17 @@ const HAIR_PRESETS = [
 ];
 const hairPresetById = id => HAIR_PRESETS.find(p => p.id === id);
 
+// Backdrop / setting: single-select. null = keep the original background.
+const BACKDROPS = [
+  { id: 'studio', label: 'Studio', desc: 'a clean seamless studio backdrop with soft, even lighting' },
+  { id: 'street', label: 'Street', desc: 'a stylish city street, softly blurred behind them' },
+  { id: 'cafe',   label: 'Café',   desc: 'a cosy café interior, softly blurred behind them' },
+  { id: 'beach',  label: 'Beach',  desc: 'a sunny beach with the sea and sky behind them' },
+  { id: 'runway', label: 'Runway', desc: 'a fashion-show runway with subtle stage lighting' },
+  { id: 'park',   label: 'Park',   desc: 'a green park in soft natural daylight' },
+];
+const backdropById = id => BACKDROPS.find(b => b.id === id);
+
 const MODEL_NAMES = {
   'gemini-3.1-flash-image': 'Nano Banana 2',
   'gemini-3-pro-image': 'Nano Banana Pro',
@@ -62,6 +73,7 @@ const state = {
   activePhotoId: localStorage.getItem('fitcheck.activePhoto') || null,
   sel: new Map(),          // category key -> Set of selected item ids (multi-select for mix & match)
   hairPresets: new Set(),  // selected hairstyle preset ids (multi-select; each becomes its own combination)
+  backdrop: null,          // backdrop/setting id, or null to keep the original background
   notes: '',
   generating: false,
   genProgress: null,       // { i, total } while a batch is running
@@ -105,7 +117,7 @@ function selectedItems() {   // flat list of every selected wardrobe item
   return out;
 }
 function anySelection() {
-  return selectedItems().length > 0 || state.hairPresets.size > 0;
+  return selectedItems().length > 0 || state.hairPresets.size > 0 || !!state.backdrop;
 }
 /* Cartesian product across every category (and the hairstyle dimension) that has a
    selection → one outfit per combination. Each combo is { items, hairPreset }.
@@ -200,11 +212,31 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), kind === 'err' ? 8000 : 4500);
 }
 
+let _heic2any;
+function loadHeic2any() {
+  _heic2any ??= new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    s.onload = () => res(window.heic2any);
+    s.onerror = () => { _heic2any = null; rej(new Error('heic2any failed to load')); };
+    document.head.appendChild(s);
+  });
+  return _heic2any;
+}
+
 async function fileToImage(file) {
+  // iPhone photos are often HEIC — convert to JPEG first (heic2any pulled from CDN on demand)
+  const isHeic = /hei[cf]/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
+  if (isHeic) {
+    try {
+      const heic2any = await loadHeic2any();
+      const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      return await createImageBitmap(Array.isArray(out) ? out[0] : out);
+    } catch (e) { console.warn('FitCheck: HEIC convert failed, trying native decode', e); }
+  }
   try {
     return await createImageBitmap(file);
   } catch {
-    // fallback for formats createImageBitmap rejects
     return new Promise((res, rej) => {
       const url = URL.createObjectURL(file);
       const img = new Image();
@@ -247,10 +279,11 @@ function nearestAspect(w, h) {
 
 /* ============================== prompt ============================== */
 
-function buildPrompt(items, notes, hairPreset) {
+function buildPrompt(items, notes, hairPreset, backdrop) {
   // individual garments (not the whole-set reference, not hair) override their piece of a whole set
   const overrideLabels = [...new Set(items.filter(i => i.cat !== 'wholeset' && i.cat !== 'hair').map(i => catByKey(i.cat).label.toLowerCase()))];
   const listPhrase = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  const scene = backdrop ? backdropById(backdrop) : null;
 
   const changes = items.map((it, i) => {
     let verb = catByKey(it.cat).verb;
@@ -261,15 +294,16 @@ function buildPrompt(items, notes, hairPreset) {
   });
   const preset = hairPreset ? hairPresetById(hairPreset) : null;
   if (preset) changes.push(`- Hairstyle: restyle the subject's hair to ${preset.desc}, adapting it naturally to their head and hairline, while keeping their face, ears and head shape unchanged.`);
+  if (scene) changes.push(`- Setting: place the subject in ${scene.desc}. Keep the subject's face, body and pose exactly the same; relight them naturally to match the new scene.`);
   const hairChanging = preset || items.some(it => it.cat === 'hair');
 
   const locked = ['face', 'facial features', 'bone structure', 'jawline', 'eyes', 'nose', 'mouth',
     'skin tone and complexion', ...(hairChanging ? [] : ['hair']), 'body shape', 'height and proportions',
-    'exact pose', 'camera angle', 'background'].join(', ');
+    'exact pose', 'camera angle', ...(scene ? [] : ['background'])].join(', ');
 
   let p = `You are performing a precise virtual try-on photo edit. Image 1 is a real photograph of one specific real person — the subject.
 
-CRITICAL — preserve the subject's identity EXACTLY. The person in the result must be unmistakably the SAME person as in Image 1: keep their ${locked} 100% identical to Image 1. Do NOT beautify, slim, smooth, restyle, age or de-age the person, and do NOT change their surroundings. This identity match matters more than anything else in the image.
+CRITICAL — preserve the subject's identity EXACTLY. The person in the result must be unmistakably the SAME person as in Image 1: keep their ${locked} 100% identical to Image 1. Do NOT beautify, slim, smooth, restyle, age or de-age the person${scene ? '' : ', and do NOT change their surroundings'}. This identity match matters more than anything else in the image.
 
 Change ONLY the following, nothing else:
 
@@ -314,9 +348,9 @@ const PROVIDERS = {
   gemini: {
     label: 'Gemini (Nano Banana)',
     /* Returns { dataUrl }. Throws Error with a human-readable message. */
-    async generate({ apiKey, model, imageSize, person, items, notes, hairPreset, signal }) {
+    async generate({ apiKey, model, imageSize, person, items, notes, hairPreset, backdrop, signal }) {
       const parts = [
-        { text: buildPrompt(items, notes, hairPreset) },
+        { text: buildPrompt(items, notes, hairPreset, backdrop) },
         dataUrlToInlinePart(person.dataUrl),
         ...items.map(it => dataUrlToInlinePart(it.dataUrl)),
       ];
@@ -410,6 +444,14 @@ function renderHair() {
     `<button class="tile add" data-action="add-item" data-cat="hair"><span class="plus">＋</span><span>Upload a cut</span></button>`;
 }
 
+function renderScene() {
+  const el = $('#scene-chips');
+  if (!el) return;
+  el.innerHTML = BACKDROPS.map(b =>
+    `<button class="hair-preset ${state.backdrop === b.id ? 'selected' : ''}" data-action="select-backdrop" data-scene="${b.id}">${esc(b.label)}</button>`
+  ).join('');
+}
+
 function renderLooks() {
   const g = $('#looks-grid');
   if (!state.looks.length) {
@@ -428,6 +470,10 @@ function renderOutfitBar() {
   for (const pid of state.hairPresets) {
     const p = hairPresetById(pid);
     chipEls.unshift(`<span class="chip">💇 ${esc(p?.label || 'Hairstyle')} <span class="x" data-action="unselect-hairpreset" data-preset="${pid}">✕</span></span>`);
+  }
+  if (state.backdrop) {
+    const b = backdropById(state.backdrop);
+    chipEls.push(`<span class="chip">🖼️ ${esc(b?.label || 'Setting')} <span class="x" data-action="unselect-backdrop">✕</span></span>`);
   }
   const chips = chipEls.length
     ? chipEls.join('')
@@ -455,6 +501,7 @@ function renderAll() {
   renderPhotos();
   renderCats();
   renderHair();
+  renderScene();
   renderLooks();
   renderOutfitBar();
   renderBanner();
@@ -470,6 +517,7 @@ function openViewer(lookId) {
   $('#viewer-meta').innerHTML =
     look.items.map(i => `<span class="chip">${catByKey(i.cat).icon} ${esc(i.name || catByKey(i.cat).label)}</span>`).join('') +
     (look.hairPreset ? `<span class="chip">💇 ${esc(hairPresetById(look.hairPreset)?.label || 'Hairstyle')}</span>` : '') +
+    (look.backdrop ? `<span class="chip">🖼️ ${esc(backdropById(look.backdrop)?.label || 'Setting')}</span>` : '') +
     (look.notes ? `<span class="chip">📝 ${esc(look.notes)}</span>` : '') +
     `<span class="when">${new Date(look.createdAt).toLocaleString()} · ${esc(MODEL_NAMES[look.model] || look.model)} · ${esc(look.size || '')}${look.ms ? ' · ' + Math.round(look.ms / 1000) + 's' : ''}</span>`;
   $('#viewer-modal').classList.add('open');
@@ -511,7 +559,7 @@ async function handleFiles(files) {
       ok++;
     } catch (e) {
       console.warn('FitCheck upload failed:', e);
-      toast("Couldn't read that image — HEIC isn't supported here, try JPEG/PNG.", 'err');
+      toast("Couldn't read that image — try a JPEG or PNG.", 'err');
     }
   }
   if (ok) toast(cat === null ? `Added ${ok} photo${ok > 1 ? 's' : ''} of you` : `Added ${ok} item${ok > 1 ? 's' : ''}`);
@@ -543,12 +591,12 @@ async function generate() {
     try {
       const out = await PROVIDERS[s.provider].generate({
         apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
-        person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, signal: state.abort.signal,
+        person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
       });
       const look = {
         id: uid(), dataUrl: out.dataUrl,
         items: combo.items.map(i => ({ id: i.id, cat: i.cat })),
-        hairPreset: combo.hairPreset, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
+        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
         ms: Date.now() - t0, createdAt: Date.now(),
       };
       await dbPut('looks', look);
@@ -581,6 +629,7 @@ function regenerateFromLook(lookId) {
     else missing++;
   }
   state.hairPresets = new Set(look.hairPreset ? [look.hairPreset] : []);
+  state.backdrop = look.backdrop || null;
   state.notes = look.notes || '';
   closeModals();
   renderAll();
@@ -657,6 +706,13 @@ document.addEventListener('click', e => {
       break;
     }
     case 'unselect-hairpreset': state.hairPresets.delete(el.dataset.preset); renderHair(); renderOutfitBar(); break;
+    case 'select-backdrop': {
+      const bd = el.dataset.scene;
+      state.backdrop = state.backdrop === bd ? null : bd;   // single-select; re-tap clears back to original
+      renderScene(); renderOutfitBar();
+      break;
+    }
+    case 'unselect-backdrop': state.backdrop = null; renderScene(); renderOutfitBar(); break;
     case 'del-photo':
       e.stopPropagation();
       armThen(el, async () => {

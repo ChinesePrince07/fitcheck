@@ -9,6 +9,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<meta name="theme-color" content="#1f3a2f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FitCheck">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
 </head>
 <body>
 
@@ -42,7 +48,7 @@
 
     <section id="lookbook-section" class="reveal">
       <header class="sec-head">
-        <h2><span class="step">IV</span> The Lookbook</h2>
+        <h2><span class="step">V</span> The Lookbook</h2>
         <p class="hint">Your generated looks, kept to compare before you commit.</p>
       </header>
       <div class="grid looks" id="looks-grid"></div>
@@ -65,6 +71,14 @@
       </header>
       <div class="hair-presets" id="hair-presets"></div>
       <div class="grid" id="hair-grid"></div>
+    </section>
+
+    <section id="scene-section" class="reveal">
+      <header class="sec-head">
+        <h2><span class="step">IV</span> The Setting</h2>
+        <p class="hint">Change the backdrop, or leave it to keep where you are.</p>
+      </header>
+      <div class="hair-presets" id="scene-chips"></div>
     </section>
   </div>
 </main>
@@ -108,9 +122,10 @@
 </div>
 
 <div id="toasts"></div>
-<input type="file" id="file-input" accept="image/*" multiple hidden>
+<input type="file" id="file-input" accept="image/*,.heic,.heif" multiple hidden>
 
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script>if ('serviceWorker' in navigator) { addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {})); }</script>
 </body>
 </html>

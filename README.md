@@ -21,6 +21,7 @@ Upload a photo of yourself and photos of the clothes you're considering (screens
 - **Mix and match** — select several tops, bottoms, or shoes and it renders every combination as its own look, so you can compare them. It shows the number of looks and the rough cost before generating.
 - **Whole-set mode** — drop in one photo of a complete outfit (a flat lay, or a look you saw somewhere) and it dresses you in the whole thing, using only the clothing from that photo.
 - **Hairstyle try-on** — choose a preset (buzz, Ivy League, slicked back, and so on) or upload a reference, and preview a new cut before booking the barber.
+- **Backdrops** — drop yourself into a studio, street, café, beach, runway, or park, or keep your own surroundings.
 - **Lookbook** — every result is saved so you can compare your options side by side.
 
 ## The model
@@ -49,6 +50,7 @@ Your photos stay in your browser (IndexedDB). The only time an image leaves your
 
 - It shows the overall look, not exact fit — it won't tell you if something runs tight in the shoulders.
 - Occasionally the safety filter blocks a normal photo; a different crop usually fixes it.
+- Installable to your phone's home screen (it's a PWA), and iPhone HEIC photos work.
 - Built with plain JavaScript, for personal use.
 
 ---

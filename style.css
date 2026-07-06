@@ -187,7 +187,8 @@ section { margin: 0; }
 #you-section { animation-delay: .05s; }
 #wardrobe-section { animation-delay: .16s; }
 #hair-section { animation-delay: .27s; }
-#lookbook-section { animation-delay: .38s; }
+#scene-section { animation-delay: .33s; }
+#lookbook-section { animation-delay: .40s; }
 @keyframes rise { to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .reveal { animation: none; opacity: 1; transform: none; } }
 
