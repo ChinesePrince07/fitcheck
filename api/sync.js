@@ -60,7 +60,12 @@ export function mergeLibrary(stored, incoming, now) {
     }
     return [...m.values()];
   };
-  return { v: 1, updatedAt: now, catalog: union(s.catalog, i.catalog), items: union(s.items, i.items), deleted };
+  // drawer order is a preference, not a record set: a non-empty incoming order wins; an empty
+  // push (a device that never reordered) can't wipe a saved order.
+  const drawerOrder = (Array.isArray(incoming?.drawerOrder) && incoming.drawerOrder.length)
+    ? incoming.drawerOrder
+    : (Array.isArray(stored?.drawerOrder) ? stored.drawerOrder : []);
+  return { v: 1, updatedAt: now, catalog: union(s.catalog, i.catalog), items: union(s.items, i.items), deleted, ...(drawerOrder.length ? { drawerOrder } : {}) };
 }
 
 /* ---- R2 (S3-compatible), aws4fetch imported lazily so tests/other paths don't need it ---- */

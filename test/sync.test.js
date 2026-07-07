@@ -50,6 +50,15 @@ test('mergeLibrary falls back to createdAt when updatedAt is absent (old entries
   assert.equal(m.catalog.find(c => c.id === 'a').drawer, 'Renamed');
 });
 
+test('mergeLibrary carries drawerOrder; non-empty incoming wins, empty cannot wipe', () => {
+  // incoming sets an order
+  let m = mergeLibrary({ catalog: [], items: [], deleted: [] }, { catalog: [], items: [], deleted: [], drawerOrder: ['B', 'A'] }, 1);
+  assert.deepEqual(m.drawerOrder, ['B', 'A']);
+  // a later empty push does not clobber the stored order
+  m = mergeLibrary({ catalog: [], items: [], deleted: [], drawerOrder: ['B', 'A'] }, { catalog: [], items: [], deleted: [] }, 2);
+  assert.deepEqual(m.drawerOrder, ['B', 'A']);
+});
+
 test('mergeLibrary handles a null stored (first push)', () => {
   const m = mergeLibrary(null, { catalog: [{ id: 'a' }], items: [], deleted: [] }, 1);
   assert.deepEqual(m.catalog.map(c => c.id), ['a']);

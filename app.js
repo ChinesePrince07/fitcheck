@@ -88,6 +88,7 @@ const state = {
   catalog: [],             // lightweight store entries { id, name, image, albumUrl, category, drawer, host, createdAt } — no image data
   catalogFilter: '',       // name filter for the Catalogue grid
   catalogDrawer: null,     // selected drawer tab: null = All; '' = Unsorted; a name = that drawer
+  drawerOrder: [],         // user's preferred drawer order (names); unlisted drawers fall in after, by age
   pendingDeleted: new Set(),   // ids deleted locally since last sync (tombstones to push)
 };
 
@@ -495,13 +496,35 @@ async function deleteDrawer() {
   toast(`Deleted drawer “${drawerLabel(d)}”.`);
 }
 
+/* Drawers that exist, in the user's saved order first, then any new ones by age. */
+function currentDrawers() {
+  const present = [...new Set(state.catalog.map(drawerOf))];   // distinct, in catalogue (age) order
+  const ordered = state.drawerOrder.filter(d => present.includes(d));
+  for (const d of present) if (!ordered.includes(d)) ordered.push(d);
+  return ordered;
+}
+function saveDrawerOrder() { try { localStorage.setItem('fitcheck.drawerOrder', JSON.stringify(state.drawerOrder)); } catch {} }
+
+/* Move the selected drawer one slot earlier (-1) or later (+1). */
+function moveDrawer(dir) {
+  const d = state.catalogDrawer;
+  if (d === null) return;
+  const order = currentDrawers();
+  const i = order.indexOf(d), j = i + dir;
+  if (i < 0 || j < 0 || j >= order.length) return;
+  [order[i], order[j]] = [order[j], order[i]];
+  state.drawerOrder = order;
+  saveDrawerOrder();
+  renderCatalog();
+  scheduleSync();
+}
+
 function renderDrawers() {
   const el = $('#catalog-drawers');
   if (!el) return;
-  // distinct drawers in insertion order, each with a count
   const counts = new Map();
   for (const c of state.catalog) { const d = drawerOf(c); counts.set(d, (counts.get(d) || 0) + 1); }
-  const drawers = [...counts.keys()];
+  const drawers = currentDrawers();
   if (state.catalogDrawer !== null && !counts.has(state.catalogDrawer)) state.catalogDrawer = null;   // drawer emptied
   const tab = (val, label, n) =>
     `<button class="hair-preset ${state.catalogDrawer === val ? 'selected' : ''}" data-action="select-drawer" data-drawer="${val === null ? '' : esc(val)}" data-all="${val === null}">${esc(label)}${n != null ? ` · ${n}` : ''}</button>`;
@@ -516,6 +539,11 @@ function renderCatalog() {
   sec.hidden = false;
   renderDrawers();
   const isDrawer = state.catalogDrawer !== null;   // drawer actions apply to a specific drawer, not "All"
+  const order = currentDrawers(), di = order.indexOf(state.catalogDrawer);
+  $('#drawer-left-btn')?.toggleAttribute('hidden', !isDrawer || order.length < 2);
+  $('#drawer-right-btn')?.toggleAttribute('hidden', !isDrawer || order.length < 2);
+  const lb = $('#drawer-left-btn'); if (lb) lb.disabled = di <= 0;
+  const rb = $('#drawer-right-btn'); if (rb) rb.disabled = di < 0 || di >= order.length - 1;
   $('#drawer-rename-btn')?.toggleAttribute('hidden', !isDrawer);
   $('#drawer-delete-btn')?.toggleAttribute('hidden', !isDrawer);
   const f = (state.catalogFilter || '').trim().toLowerCase();
@@ -866,6 +894,7 @@ function buildLocalLibrary() {
     catalog: state.catalog.map(c => ({ id: c.id, name: c.name, image: c.image, albumUrl: c.albumUrl, category: c.category, drawer: c.drawer || '', host: c.host, createdAt: c.createdAt, updatedAt: c.updatedAt || c.createdAt })),
     items: state.items.filter(itemImageUrl).map(i => ({ id: i.id, cat: i.cat, name: i.name || '', imageUrl: itemImageUrl(i), source: i.source || {}, createdAt: i.createdAt, updatedAt: i.updatedAt || i.createdAt })),
     deleted: [...state.pendingDeleted],
+    ...(state.drawerOrder.length ? { drawerOrder: state.drawerOrder } : {}),
   };
 }
 
@@ -899,6 +928,7 @@ async function syncNow(silent) {
 async function applyMergedLibrary(lib) {
   const cat = Array.isArray(lib?.catalog) ? lib.catalog : [];
   const items = Array.isArray(lib?.items) ? lib.items : [];
+  if (Array.isArray(lib?.drawerOrder) && lib.drawerOrder.length) { state.drawerOrder = lib.drawerOrder; saveDrawerOrder(); }
   // catalogue: replace local set with the merged one
   const mergedCatIds = new Set(cat.map(c => c.id));
   for (const c of state.catalog) if (!mergedCatIds.has(c.id)) { try { await dbDel('catalog', c.id); } catch {} }
@@ -1105,6 +1135,8 @@ document.addEventListener('click', e => {
       state.catalogDrawer = el.dataset.all === 'true' ? null : el.dataset.drawer;
       renderCatalog();
       break;
+    case 'move-drawer-left': moveDrawer(-1); break;
+    case 'move-drawer-right': moveDrawer(1); break;
     case 'rename-drawer': renameDrawer(); break;
     case 'delete-drawer': deleteDrawer(); break;
     case 'add-catalog': materializeCatalog(id); break;
@@ -1208,6 +1240,7 @@ $('#file-input').addEventListener('change', async e => {
     state.items.sort((a, b) => a.createdAt - b.createdAt);
     state.looks.sort((a, b) => b.createdAt - a.createdAt);
     state.catalog.sort((a, b) => a.createdAt - b.createdAt);
+    try { state.drawerOrder = JSON.parse(localStorage.getItem('fitcheck.drawerOrder')) || []; } catch { state.drawerOrder = []; }
     if (!state.photos.some(p => p.id === state.activePhotoId)) {
       state.activePhotoId = state.photos[0]?.id || null;
     }
