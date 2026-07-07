@@ -83,8 +83,9 @@ const state = {
   uploadCat: null,         // null => uploading a photo of you
   currentLookId: null,     // look open in viewer
   importMeta: null,        // { pageUrl, source, images:[{url,kind}], cat, chosen:Set<idx> } while the import modal is open
-  catalog: [],             // lightweight store entries { id, name, image, albumUrl, category, host, createdAt } — no image data
+  catalog: [],             // lightweight store entries { id, name, image, albumUrl, category, drawer, host, createdAt } — no image data
   catalogFilter: '',       // name filter for the Catalogue grid
+  catalogDrawer: null,     // selected drawer tab: null = All; '' = Unsorted; a name = that drawer
   pendingDeleted: new Set(),   // ids deleted locally since last sync (tombstones to push)
 };
 
@@ -459,16 +460,37 @@ function renderScene() {
   ).join('');
 }
 
+const drawerOf = c => c.drawer || '';
+const drawerLabel = d => d || 'Unsorted';
+
+function renderDrawers() {
+  const el = $('#catalog-drawers');
+  if (!el) return;
+  // distinct drawers in insertion order, each with a count
+  const counts = new Map();
+  for (const c of state.catalog) { const d = drawerOf(c); counts.set(d, (counts.get(d) || 0) + 1); }
+  const drawers = [...counts.keys()];
+  if (state.catalogDrawer !== null && !counts.has(state.catalogDrawer)) state.catalogDrawer = null;   // drawer emptied
+  const tab = (val, label, n) =>
+    `<button class="hair-preset ${state.catalogDrawer === val ? 'selected' : ''}" data-action="select-drawer" data-drawer="${val === null ? '' : esc(val)}" data-all="${val === null}">${esc(label)}${n != null ? ` · ${n}` : ''}</button>`;
+  el.innerHTML = tab(null, 'All', state.catalog.length) +
+    drawers.map(d => tab(d, drawerLabel(d), counts.get(d))).join('');
+}
+
 function renderCatalog() {
   const sec = $('#catalog-section');
   if (!sec) return;
   if (!state.catalog.length) { sec.hidden = true; return; }
   sec.hidden = false;
+  renderDrawers();
   const f = (state.catalogFilter || '').trim().toLowerCase();
-  const list = f ? state.catalog.filter(c => (c.name || '').toLowerCase().includes(f)) : state.catalog;
+  const list = state.catalog.filter(c =>
+    (state.catalogDrawer === null || drawerOf(c) === state.catalogDrawer) &&
+    (!f || (c.name || '').toLowerCase().includes(f)));
   const added = new Set(state.items.filter(i => i.source?.url).map(i => i.source.url));
   const count = $('#catalog-count');
-  if (count) count.textContent = `${list.length}${f ? ' of ' + state.catalog.length : ''} item${list.length !== 1 ? 's' : ''}`;
+  const scope = state.catalogDrawer === null ? state.catalog.length : state.catalog.filter(c => drawerOf(c) === state.catalogDrawer).length;
+  if (count) count.textContent = `${list.length}${list.length !== scope ? ' of ' + scope : ''} item${list.length !== 1 ? 's' : ''}`;
   $('#catalog-grid').innerHTML = list.map(c => {
     const isAdded = added.has(c.albumUrl);
     return `<div class="tile catalog-tile ${isAdded ? 'added' : ''}" data-action="add-catalog" data-id="${c.id}" role="button" tabindex="0" title="${isAdded ? 'Already in your wardrobe' : 'Add to wardrobe'}">
@@ -689,6 +711,12 @@ async function addImported() {
    Browse them in the Catalogue section; each piece materialises into a real wardrobe item
    only when tapped. Dedupes by album URL so re-running a store adds only what's new. */
 async function importStoreFromUrl(raw) {
+  // name a drawer for this batch (blank => Unsorted); existing names shown as a hint so they merge
+  const existing = [...new Set(state.catalog.map(c => c.drawer).filter(Boolean))];
+  const hint = existing.length ? `\n\nExisting drawers: ${existing.slice(0, 8).join(', ')}` : '';
+  const answer = prompt(`Name a drawer for these items (leave blank for Unsorted):${hint}`, '');
+  if (answer === null) return;                 // cancelled the whole import
+  const drawer = answer.trim();
   const btn = $('#import-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Reading store…'; }
   const found = [];
@@ -705,7 +733,7 @@ async function importStoreFromUrl(raw) {
       for (const it of meta.items) {
         if (seenAlbum.has(it.albumUrl)) continue;
         seenAlbum.add(it.albumUrl); anyNew = true;
-        found.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', host, createdAt: Date.now() });
+        found.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, createdAt: Date.now() });
       }
       if (!anyNew) break;                       // page repeated a prior one => past the end
       if (btn) btn.textContent = `Reading store… ${found.length}`;
@@ -719,10 +747,11 @@ async function importStoreFromUrl(raw) {
   }
   for (const c of found) { try { await dbPut('catalog', c); } catch {} }
   state.catalog.push(...found);
+  state.catalogDrawer = drawer;                 // focus the drawer we just filled
   renderCatalog();
   scheduleSync();
   $('#catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast(`Catalogued ${found.length} item${found.length !== 1 ? 's' : ''} from ${host || 'the store'} — browse them below, tap to add.`);
+  toast(`Catalogued ${found.length} item${found.length !== 1 ? 's' : ''} into “${drawer || 'Unsorted'}” — tap any to add.`);
 }
 
 /* Ask the vision model which category a garment photo is — titles (Yupoo SKU codes)
@@ -791,7 +820,7 @@ const itemImageUrl = it => it.imageUrl || it.source?.imageUrl || '';
 function buildLocalLibrary() {
   return {
     v: 1,
-    catalog: state.catalog.map(c => ({ id: c.id, name: c.name, image: c.image, albumUrl: c.albumUrl, category: c.category, host: c.host, createdAt: c.createdAt })),
+    catalog: state.catalog.map(c => ({ id: c.id, name: c.name, image: c.image, albumUrl: c.albumUrl, category: c.category, drawer: c.drawer || '', host: c.host, createdAt: c.createdAt })),
     items: state.items.filter(itemImageUrl).map(i => ({ id: i.id, cat: i.cat, name: i.name || '', imageUrl: itemImageUrl(i), source: i.source || {}, createdAt: i.createdAt })),
     deleted: [...state.pendingDeleted],
   };
@@ -1030,6 +1059,10 @@ document.addEventListener('click', e => {
       });
       break;
     case 'generate': generate(); break;
+    case 'select-drawer':
+      state.catalogDrawer = el.dataset.all === 'true' ? null : el.dataset.drawer;
+      renderCatalog();
+      break;
     case 'add-catalog': materializeCatalog(id); break;
     case 'del-catalog':
       e.stopPropagation();
