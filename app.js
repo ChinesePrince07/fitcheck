@@ -463,6 +463,35 @@ function renderScene() {
 const drawerOf = c => c.drawer || '';
 const drawerLabel = d => d || 'Unsorted';
 
+async function renameDrawer() {
+  const d = state.catalogDrawer;
+  if (d === null) return;
+  const answer = prompt(`Rename drawer “${drawerLabel(d)}” to:`, d);
+  if (answer === null) return;
+  const next = answer.trim();
+  if (next === d) return;
+  const affected = state.catalog.filter(c => drawerOf(c) === d);
+  for (const c of affected) { c.drawer = next; try { await dbPut('catalog', c); } catch {} }
+  state.catalogDrawer = next;                 // follow the rename (merges into an existing drawer if names match)
+  renderCatalog();
+  scheduleSync();
+  toast(`Renamed to “${next || 'Unsorted'}”.`);
+}
+
+async function deleteDrawer() {
+  const d = state.catalogDrawer;
+  if (d === null) return;
+  const victims = state.catalog.filter(c => drawerOf(c) === d);
+  if (!victims.length) return;
+  if (!confirm(`Delete drawer “${drawerLabel(d)}” and its ${victims.length} item${victims.length !== 1 ? 's' : ''}? Your wardrobe stays untouched.`)) return;
+  for (const c of victims) { try { await dbDel('catalog', c.id); } catch {} state.pendingDeleted.add(c.id); }
+  state.catalog = state.catalog.filter(c => drawerOf(c) !== d);
+  state.catalogDrawer = null;
+  renderCatalog();
+  scheduleSync();
+  toast(`Deleted drawer “${drawerLabel(d)}”.`);
+}
+
 function renderDrawers() {
   const el = $('#catalog-drawers');
   if (!el) return;
@@ -483,6 +512,9 @@ function renderCatalog() {
   if (!state.catalog.length) { sec.hidden = true; return; }
   sec.hidden = false;
   renderDrawers();
+  const isDrawer = state.catalogDrawer !== null;   // drawer actions apply to a specific drawer, not "All"
+  $('#drawer-rename-btn')?.toggleAttribute('hidden', !isDrawer);
+  $('#drawer-delete-btn')?.toggleAttribute('hidden', !isDrawer);
   const f = (state.catalogFilter || '').trim().toLowerCase();
   const list = state.catalog.filter(c =>
     (state.catalogDrawer === null || drawerOf(c) === state.catalogDrawer) &&
@@ -859,8 +891,7 @@ async function applyMergedLibrary(lib) {
   // catalogue: replace local set with the merged one
   const mergedCatIds = new Set(cat.map(c => c.id));
   for (const c of state.catalog) if (!mergedCatIds.has(c.id)) { try { await dbDel('catalog', c.id); } catch {} }
-  const localCatIds = new Set(state.catalog.map(c => c.id));
-  for (const c of cat) if (!localCatIds.has(c.id)) { try { await dbPut('catalog', c); } catch {} }
+  for (const c of cat) { try { await dbPut('catalog', c); } catch {} }   // upsert all so field changes (e.g. drawer rename) persist
   state.catalog = cat.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   // items: drop synced-but-now-gone (deleted elsewhere); re-materialise new ones
   const mergedItemIds = new Set(items.map(i => i.id));
@@ -1063,6 +1094,8 @@ document.addEventListener('click', e => {
       state.catalogDrawer = el.dataset.all === 'true' ? null : el.dataset.drawer;
       renderCatalog();
       break;
+    case 'rename-drawer': renameDrawer(); break;
+    case 'delete-drawer': deleteDrawer(); break;
     case 'add-catalog': materializeCatalog(id); break;
     case 'del-catalog':
       e.stopPropagation();

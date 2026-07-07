@@ -78,7 +78,9 @@
       <div class="catalog-bar">
         <input id="catalog-filter" type="search" placeholder="Filter by name…" autocomplete="off" spellcheck="false">
         <span class="count" id="catalog-count"></span>
-        <button class="btn small" data-action="clear-catalog">Clear</button>
+        <button class="btn small" id="drawer-rename-btn" data-action="rename-drawer" hidden>Rename</button>
+        <button class="btn small danger" id="drawer-delete-btn" data-action="delete-drawer" hidden>Delete drawer</button>
+        <button class="btn small" data-action="clear-catalog">Clear all</button>
       </div>
       <div class="grid" id="catalog-grid"></div>
     </section>
