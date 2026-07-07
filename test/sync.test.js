@@ -29,6 +29,27 @@ test('mergeLibrary unions by id, drops tombstoned, incoming wins', () => {
   assert.deepEqual(m.items.map(i => i.id), ['y']);                       // x tombstoned out
 });
 
+test('mergeLibrary keeps the newest version — a stale device cannot clobber a rename', () => {
+  const stored = { catalog: [{ id: 'a', drawer: 'Summer', updatedAt: 200 }], items: [], deleted: [] };   // PC renamed
+  const phoneStale = { catalog: [{ id: 'a', drawer: '', updatedAt: 100 }], items: [], deleted: [] };      // phone's old copy
+  const m = mergeLibrary(stored, phoneStale, 1);
+  assert.equal(m.catalog.find(c => c.id === 'a').drawer, 'Summer');   // newer (200) survives
+});
+
+test('mergeLibrary lets a genuinely newer incoming edit win', () => {
+  const stored = { catalog: [{ id: 'a', drawer: '', updatedAt: 100 }], items: [], deleted: [] };
+  const incoming = { catalog: [{ id: 'a', drawer: 'Winter', updatedAt: 300 }], items: [], deleted: [] };
+  const m = mergeLibrary(stored, incoming, 1);
+  assert.equal(m.catalog.find(c => c.id === 'a').drawer, 'Winter');
+});
+
+test('mergeLibrary falls back to createdAt when updatedAt is absent (old entries)', () => {
+  const stored = { catalog: [{ id: 'a', drawer: 'Renamed', updatedAt: 500, createdAt: 10 }], items: [], deleted: [] };
+  const incoming = { catalog: [{ id: 'a', drawer: '', createdAt: 10 }], items: [], deleted: [] };   // no updatedAt -> stamp 10
+  const m = mergeLibrary(stored, incoming, 1);
+  assert.equal(m.catalog.find(c => c.id === 'a').drawer, 'Renamed');
+});
+
 test('mergeLibrary handles a null stored (first push)', () => {
   const m = mergeLibrary(null, { catalog: [{ id: 'a' }], items: [], deleted: [] }, 1);
   assert.deepEqual(m.catalog.map(c => c.id), ['a']);

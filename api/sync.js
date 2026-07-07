@@ -43,14 +43,21 @@ function normalize(o) {
 
 /* Merge two libraries: union records by id, drop anything tombstoned in either,
    incoming wins on id collisions. Tombstone lists are unioned. Pure + tested. */
+const stamp = r => r.updatedAt || r.createdAt || 0;   // per-record recency
+
 export function mergeLibrary(stored, incoming, now) {
   const s = normalize(stored), i = normalize(incoming);
   const deleted = [...new Set([...s.deleted, ...i.deleted])];
   const del = new Set(deleted);
+  // keep the NEWEST version of each id (not "whoever pushed last") — so a stale device
+  // can't clobber another device's edit. Ties: incoming (processed later) wins.
   const union = (a, b) => {
     const m = new Map();
-    for (const r of a) if (r && r.id && !del.has(r.id)) m.set(r.id, r);
-    for (const r of b) if (r && r.id && !del.has(r.id)) m.set(r.id, r);   // incoming wins
+    for (const r of [...a, ...b]) {
+      if (!r || !r.id || del.has(r.id)) continue;
+      const prev = m.get(r.id);
+      if (!prev || stamp(r) >= stamp(prev)) m.set(r.id, r);
+    }
     return [...m.values()];
   };
   return { v: 1, updatedAt: now, catalog: union(s.catalog, i.catalog), items: union(s.items, i.items), deleted };

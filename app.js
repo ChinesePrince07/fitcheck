@@ -471,7 +471,8 @@ async function renameDrawer() {
   const next = answer.trim();
   if (next === d) return;
   const affected = state.catalog.filter(c => drawerOf(c) === d);
-  for (const c of affected) { c.drawer = next; try { await dbPut('catalog', c); } catch {} }
+  const now = Date.now();
+  for (const c of affected) { c.drawer = next; c.updatedAt = now; try { await dbPut('catalog', c); } catch {} }   // bump recency so the rename wins the merge
   state.catalogDrawer = next;                 // follow the rename (merges into an existing drawer if names match)
   renderCatalog();
   scheduleSync();
@@ -765,7 +766,7 @@ async function importStoreFromUrl(raw) {
       for (const it of meta.items) {
         if (seenAlbum.has(it.albumUrl)) continue;
         seenAlbum.add(it.albumUrl); anyNew = true;
-        found.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, createdAt: Date.now() });
+        found.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, createdAt: Date.now(), updatedAt: Date.now() });
       }
       if (!anyNew) break;                       // page repeated a prior one => past the end
       if (btn) btn.textContent = `Reading store… ${found.length}`;
@@ -852,8 +853,8 @@ const itemImageUrl = it => it.imageUrl || it.source?.imageUrl || '';
 function buildLocalLibrary() {
   return {
     v: 1,
-    catalog: state.catalog.map(c => ({ id: c.id, name: c.name, image: c.image, albumUrl: c.albumUrl, category: c.category, drawer: c.drawer || '', host: c.host, createdAt: c.createdAt })),
-    items: state.items.filter(itemImageUrl).map(i => ({ id: i.id, cat: i.cat, name: i.name || '', imageUrl: itemImageUrl(i), source: i.source || {}, createdAt: i.createdAt })),
+    catalog: state.catalog.map(c => ({ id: c.id, name: c.name, image: c.image, albumUrl: c.albumUrl, category: c.category, drawer: c.drawer || '', host: c.host, createdAt: c.createdAt, updatedAt: c.updatedAt || c.createdAt })),
+    items: state.items.filter(itemImageUrl).map(i => ({ id: i.id, cat: i.cat, name: i.name || '', imageUrl: itemImageUrl(i), source: i.source || {}, createdAt: i.createdAt, updatedAt: i.updatedAt || i.createdAt })),
     deleted: [...state.pendingDeleted],
   };
 }
