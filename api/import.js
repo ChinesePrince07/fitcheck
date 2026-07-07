@@ -46,3 +46,85 @@ export function guardUrl(raw) {
   if (PRIVATE_HOST.test(host) || isPrivateIp(host)) return { ok: false, reason: 'blocked-host' };
   return { ok: true, url };
 }
+
+/* ---- structured-data extraction (no DOM in Edge; regex + JSON.parse) ---- */
+
+function ogMeta(html, prop) {
+  const a = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']*)["']`, 'i');
+  const b = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${prop}["']`, 'i');
+  return (html.match(a) || html.match(b) || [])[1] || null;
+}
+
+function jsonLdNodes(html) {
+  const out = [];
+  const re = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    let data;
+    try { data = JSON.parse(m[1].trim()); } catch { continue; }
+    const stack = [data];
+    while (stack.length) {
+      const n = stack.pop();
+      if (Array.isArray(n)) { stack.push(...n); continue; }
+      if (n && typeof n === 'object') { out.push(n); if (Array.isArray(n['@graph'])) stack.push(...n['@graph']); }
+    }
+  }
+  return out;
+}
+
+const typeIs = (n, t) => { const a = n['@type']; return a === t || (Array.isArray(a) && a.includes(t)); };
+const toNum = v => { if (v == null || v === '') return null; const n = Number(String(v).replace(/[^0-9.]/g, '')); return Number.isNaN(n) ? null : n; };
+
+export function extractProduct(html, baseUrl) {
+  const nodes = jsonLdNodes(html);
+  const product = nodes.find(n => typeIs(n, 'Product'));
+  let name = null, price = null, currency = null;
+  const images = [];
+  const pushImg = (u, kind) => {
+    if (!u || typeof u !== 'string') return;
+    let abs; try { abs = new URL(u, baseUrl).href; } catch { return; }
+    if (!/^https?:/i.test(abs)) return;
+    if (!images.some(x => x.url === abs)) images.push({ url: abs, kind });
+  };
+  if (product) {
+    if (typeof product.name === 'string') name = product.name;
+    const field = product.image;
+    const arr = Array.isArray(field) ? field : field ? [field] : [];
+    for (const it of arr) pushImg(typeof it === 'string' ? it : it && it.url, 'packshot');
+    let offer = product.offers;
+    if (Array.isArray(offer)) offer = offer[0];
+    if (offer && typeof offer === 'object') {
+      price = toNum(offer.price ?? offer.lowPrice ?? offer.highPrice);
+      if (typeof offer.priceCurrency === 'string') currency = offer.priceCurrency;
+    }
+  }
+  if (!name) name = ogMeta(html, 'og:title') || (html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || null;
+  pushImg(ogMeta(html, 'og:image:secure_url') || ogMeta(html, 'og:image'), 'og');
+  if (price == null) price = toNum(ogMeta(html, 'product:price:amount') || ogMeta(html, 'og:price:amount'));
+  if (!currency) currency = ogMeta(html, 'product:price:currency') || ogMeta(html, 'og:price:currency') || null;
+
+  let breadcrumb = '';
+  const bc = nodes.find(n => typeIs(n, 'BreadcrumbList'));
+  if (bc && Array.isArray(bc.itemListElement)) {
+    breadcrumb = bc.itemListElement.map(e => e && (e.name || (e.item && e.item.name))).filter(Boolean).join(' ');
+  }
+  return { name: name ? name.trim() : null, price, currency, images, breadcrumb };
+}
+
+/* ---- category guess (ordered: specific accessories/outer before generic 'top') ---- */
+
+const CAT_KEYWORDS = [
+  ['shoes',    /\b(sneaker|trainer|shoe|boot|loafer|heel|sandal|footwear|moccasin|derby|brogue)s?\b/i],
+  ['outer',    /\b(coat|jacket|blazer|parka|overcoat|outerwear|gilet|cardigan|puffer|windbreaker|trench)s?\b/i],
+  ['bottom',   /\b(jean|trouser|pant|chino|short|skirt|legging|jogger|slack|culotte)s?\b/i],
+  ['hat',      /\b(hat|beanie|cap|bucket|balaclava)s?\b/i],
+  ['watch',    /\bwatch(?:es)?\b/i],
+  ['necklace', /\b(necklace|pendant)s?\b/i],
+  ['bracelet', /\b(bracelet|bangle|cuff)s?\b/i],
+  ['top',      /\b(shirt|tee|t-shirt|top|blouse|sweater|jumper|hoodie|polo|knit|sweatshirt|vest|turtleneck|tank|camisole)s?\b/i],
+];
+export function guessCategory(text) {
+  const t = String(text || '');
+  for (const [key, re] of CAT_KEYWORDS) if (re.test(t)) return key;
+  return 'other';
+}
