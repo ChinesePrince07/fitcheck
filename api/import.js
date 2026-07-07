@@ -184,7 +184,9 @@ export default async function handler(req) {
   try { params = new URL(req.url).searchParams; } catch { return json({ ok: false, reason: 'bad-request' }, 400); }
   const img = params.get('img');
   const page = params.get('url');
+  const store = params.get('store');
   if (img) return proxyImage(img);
+  if (store) return importStore(store);
   if (page) return importMeta(page);
   return json({ ok: false, reason: 'missing-param' }, 400);
 }
@@ -225,4 +227,52 @@ async function proxyImage(raw) {
   const len = res.headers.get('content-length');
   if (len && Number(len) > MAX_IMG) return json({ ok: false, reason: 'too-large' }, 413);
   return new Response(res.body, { status: 200, headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=3600' } });
+}
+
+/* ---- Yupoo store/category import (bulk) ----
+   A Yupoo category page is server-rendered as a grid of `album__main` cards, each
+   an <a title=… href="/albums/…"> wrapping a cover <img data-src="photo.yupoo.com/…">.
+   One card = one product. Parse every card on a page into {name, image, albumUrl}. */
+export function extractYupooStore(html, baseUrl) {
+  const out = [];
+  const parts = html.split('album__main');
+  for (let k = 1; k < parts.length; k++) {
+    const seg = parts[k].slice(0, 900);                       // the anchor + its imgwrap
+    const title = (seg.match(/title="([^"]*)"/i) || [])[1] || '';
+    const href = (seg.match(/href="(\/albums\/[^"]+)"/i) || [])[1];
+    const img = (seg.match(/data-src="([^"]*photo\.yupoo\.com[^"]+)"/i) || [])[1];
+    if (!href || !img) continue;
+    let albumUrl, image;
+    try { albumUrl = new URL(href.replace(/&amp;/g, '&'), baseUrl).href; } catch { continue; }
+    try { image = new URL(img.replace(/&amp;/g, '&'), baseUrl).href; } catch { continue; }
+    image = image.replace(/\/(small|medium)\.jpg/i, '/big.jpg');   // bump cover to a larger variant
+    out.push({ name: title.trim(), image, albumUrl, category: guessCategory(title) });
+  }
+  return out;
+}
+
+const STORE_MAX_PAGES = 20;
+const STORE_MAX_ITEMS = 2000;
+
+async function importStore(raw) {
+  const g = guardUrl(raw);
+  if (!g.ok) return json({ ok: false, reason: g.reason }, 400);
+  const items = [];
+  const seen = new Set();
+  for (let page = 1; page <= STORE_MAX_PAGES; page++) {
+    const pageUrl = new URL(g.url.href);
+    pageUrl.searchParams.set('page', String(page));
+    let res;
+    try { res = await guardedFetch(pageUrl.href, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(12000) }); }
+    catch { break; }
+    if (!res.ok) break;
+    let html;
+    try { html = await res.text(); } catch { break; }
+    const fresh = extractYupooStore(html, g.url.href).filter(it => !seen.has(it.albumUrl));
+    if (!fresh.length) break;                                 // empty or a repeat of a prior page => past the end
+    for (const it of fresh) { seen.add(it.albumUrl); items.push(it); }
+    if (items.length >= STORE_MAX_ITEMS) break;
+  }
+  if (!items.length) return json({ ok: false, reason: 'no-albums' }, 200);
+  return json({ ok: true, store: { host: g.url.hostname.replace(/^www\./, '') }, total: items.length, items }, 200);
 }

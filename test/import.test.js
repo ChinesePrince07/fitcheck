@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { guardUrl, extractProduct, guessCategory, refineForHost, guardedFetch } from '../api/import.js';
+import { guardUrl, extractProduct, guessCategory, refineForHost, guardedFetch, extractYupooStore } from '../api/import.js';
 import handler from '../api/import.js';
 
 test('guardUrl accepts a normal https product URL', () => {
@@ -156,4 +156,29 @@ test('handler returns friendly 200 when the HTML body read fails', async () => {
     const body = await res.json();
     assert.equal(body.ok, false);
   } finally { globalThis.fetch = orig; }
+});
+
+const YUPOO_CATEGORY = `<div class="categories__children">
+  <a class="album__main" title="P690 - [B+] Andrè Linen Shirt" href="/albums/244986668?uid=1&isSubCate=false&referrercate=5016303">
+    <div class="album__imgwrap">
+      <img alt="" data-type="photo" class="album__absolute album__img autocover" data-src="https://photo.yupoo.com/aristide/b6829c553a/medium.jpg">
+      <div class="text_overflow album__photonumber">28</div>
+    </div>
+  </a>
+  <a class="album__main" title="P450 - Cargo Trousers" href="/albums/244582907?uid=1&isSubCate=false&referrercate=5016303">
+    <div class="album__imgwrap">
+      <img alt="" data-type="photo" class="album__absolute album__img autocover" data-src="https://photo.yupoo.com/aristide/b70e762b79/small.jpg">
+    </div>
+  </a>
+</div>`;
+
+test('extractYupooStore parses every album card into a product', () => {
+  const items = extractYupooStore(YUPOO_CATEGORY, 'https://aristide.x.yupoo.com/categories/5016303');
+  assert.equal(items.length, 2);
+  assert.equal(items[0].name, 'P690 - [B+] Andrè Linen Shirt');
+  assert.equal(items[0].albumUrl, 'https://aristide.x.yupoo.com/albums/244986668?uid=1&isSubCate=false&referrercate=5016303');
+  assert.equal(items[0].image, 'https://photo.yupoo.com/aristide/b6829c553a/big.jpg');   // medium -> big
+  assert.equal(items[0].category, 'top');                                                // "Shirt"
+  assert.equal(items[1].image, 'https://photo.yupoo.com/aristide/b70e762b79/big.jpg');   // small -> big
+  assert.equal(items[1].category, 'bottom');                                             // "Trousers"
 });

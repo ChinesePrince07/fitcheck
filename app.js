@@ -579,6 +579,7 @@ async function importFromUrl() {
   if (!proxyAvailable()) { toast('Import runs on the hosted site (fitcheck.andypandy.org), not locally.', 'err'); return; }
   const raw = ($('#import-url')?.value || '').trim();
   if (!/^https?:\/\//i.test(raw)) { toast('Paste a full product link (starting with http).', 'err'); return; }
+  if (/yupoo\.com\/categories\//i.test(raw)) return importStoreFromUrl(raw);   // whole-store bulk import
   const btn = $('#import-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
   try {
@@ -650,6 +651,54 @@ async function addImported() {
   closeModals();
   renderAll();
   toast(ok ? `Added ${ok} item${ok > 1 ? 's' : ''} from ${host}.` : "Couldn't fetch that image — try again.", ok ? '' : 'err');
+}
+
+/* Bulk-import a whole Yupoo store/category: list every album, then download each
+   cover through the proxy into a wardrobe item. Dedupes by album URL so re-running
+   a store only adds what's new. Modest concurrency keeps hundreds of items sane. */
+async function importStoreFromUrl(raw) {
+  const btn = $('#import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Reading store…'; }
+  let meta;
+  try {
+    const res = await fetch('/api/import?store=' + encodeURIComponent(raw));
+    meta = await res.json().catch(() => ({ ok: false }));
+  } catch { meta = { ok: false }; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+  if (!meta.ok || !meta.items?.length) { toast("Couldn't read that store page.", 'err'); return; }
+
+  const seen = new Set(state.items.filter(i => i.source?.url).map(i => i.source.url));
+  const todo = meta.items.filter(it => !seen.has(it.albumUrl));
+  if (!todo.length) { toast(`All ${meta.total} items from that store are already in your wardrobe.`); return; }
+  if (!confirm(`Import ${todo.length} items from ${meta.store?.host || 'this store'} into your wardrobe?\n\nThis downloads ${todo.length} images and can take a few minutes.`)) return;
+
+  let done = 0, failed = 0;
+  const CONCURRENCY = 5;
+  const setBtn = t => { if (btn) btn.textContent = t; };
+  setBtn(`Importing 0/${todo.length}…`);
+  if (btn) btn.disabled = true;
+  for (let i = 0; i < todo.length; i += CONCURRENCY) {
+    await Promise.all(todo.slice(i, i + CONCURRENCY).map(async it => {
+      try {
+        const res = await fetch('/api/import?img=' + encodeURIComponent(it.image));
+        if (!res.ok) throw new Error('proxy ' + res.status);
+        const { dataUrl } = await resizeFile(await res.blob(), ITEM_MAX_DIM);
+        const rec = {
+          id: uid(), cat: it.category || 'other', dataUrl, name: it.name || '',
+          source: { name: it.name || '', price: null, currency: '', host: meta.store?.host || '', url: it.albumUrl },
+          createdAt: Date.now(),
+        };
+        await dbPut('items', rec);
+        state.items.push(rec);
+        done++;
+      } catch (e) { console.warn('FitCheck store import failed:', it.albumUrl, e); failed++; }
+    }));
+    setBtn(`Importing ${done}/${todo.length}…`);
+    if (i % 30 === 0) renderCats();          // let tiles trickle in
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+  renderAll();
+  toast(`Imported ${done} item${done !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''} from ${meta.store?.host || 'the store'}.`);
 }
 
 async function generate() {
