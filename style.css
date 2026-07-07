@@ -386,3 +386,6 @@ section { margin: 0; }
 .catalog-tile.added .name { color: var(--gold-br); }
 .catalog-tile.busy { opacity: .45; pointer-events: none; }
 .catalog-tile.busy::after { content: '…'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--gold-br); background: rgba(21,42,32,.35); }
+
+/* ---------- sync ---------- */
+.sync-status { display: block; margin-top: 7px; font-family: var(--serif); font-style: italic; font-size: 12.5px; color: var(--ink-soft); }

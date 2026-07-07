@@ -115,6 +115,14 @@
       </span>
     </label>
     <p class="field note">Every fit is rendered on <strong>Nano Banana Pro · 1080p</strong> (≈$0.14 apiece, ~20–40s). No settings to trouble yourself with.</p>
+    <label class="field">
+      <span>Sync secret — same passphrase on every device shares your catalogue &amp; wardrobe (needs the hosted site)</span>
+      <span class="keyrow">
+        <input type="password" id="sync-secret" placeholder="a passphrase you choose" autocomplete="off" spellcheck="false">
+        <button class="btn small" data-action="sync-now" id="sync-now-btn">Sync now</button>
+      </span>
+      <span class="sync-status" id="sync-status"></span>
+    </label>
     <div class="row">
       <button class="btn" data-action="test-key" id="test-key-btn">Test key</button>
       <span id="test-key-result" class="test-result"></span>

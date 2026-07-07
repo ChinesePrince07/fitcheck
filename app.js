@@ -59,6 +59,7 @@ const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and li
 const DEFAULT_SETTINGS = {
   provider: 'gemini',
   apiKey: '',
+  syncSecret: '',
 };
 
 const PERSON_MAX_DIM = 2048;   // keep the face at high resolution to help identity preservation
@@ -83,6 +84,7 @@ const state = {
   importMeta: null,        // { pageUrl, source, images:[{url,kind}], cat, chosen:Set<idx> } while the import modal is open
   catalog: [],             // lightweight store entries { id, name, image, albumUrl, category, host, createdAt } — no image data
   catalogFilter: '',       // name filter for the Catalogue grid
+  pendingDeleted: new Set(),   // ids deleted locally since last sync (tombstones to push)
 };
 
 function getSettings() {
@@ -558,6 +560,8 @@ function openSettings() {
   $('#set-key').value = s.apiKey;
   $('#test-key-result').textContent = '';
   $('#test-key-result').className = 'test-result';
+  const sync = $('#sync-secret'); if (sync) sync.value = s.syncSecret || '';
+  setSyncStatus(syncEnabled() ? 'Sync on' : (proxyAvailable() ? 'Sync off — add a secret' : 'Sync runs on the hosted site'));
   $('#settings-modal').classList.add('open');
 }
 
@@ -661,6 +665,7 @@ async function addImported() {
       const rec = {
         id: uid(), cat: m.cat, dataUrl,
         name: m.source.name || '',
+        imageUrl: url,   // direct source image, so other devices can re-load it on sync
         source: { name: m.source.name || '', price: m.source.price ?? null, currency: m.source.currency || '', host: m.source.host || '', url: m.pageUrl },
         createdAt: Date.now(),
       };
@@ -674,6 +679,7 @@ async function addImported() {
   state.importMeta = null;
   closeModals();
   renderAll();
+  if (ok) scheduleSync();
   toast(ok ? `Added ${ok} item${ok > 1 ? 's' : ''} from ${host}.` : "Couldn't fetch that image — try again.", ok ? '' : 'err');
 }
 
@@ -713,6 +719,7 @@ async function importStoreFromUrl(raw) {
   for (const c of found) { try { await dbPut('catalog', c); } catch {} }
   state.catalog.push(...found);
   renderCatalog();
+  scheduleSync();
   $('#catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   toast(`Catalogued ${found.length} item${found.length !== 1 ? 's' : ''} from ${host || 'the store'} — browse them below, tap to add.`);
 }
@@ -731,18 +738,98 @@ async function materializeCatalog(id) {
     const { dataUrl } = await resizeFile(await res.blob(), ITEM_MAX_DIM);
     const rec = {
       id: uid(), cat: c.category || 'other', dataUrl, name: c.name || '',
+      imageUrl: c.image,   // lets other devices re-load the picture on sync
       source: { name: c.name || '', price: null, currency: '', host: c.host || '', url: c.albumUrl },
       createdAt: Date.now(),
     };
     await dbPut('items', rec);
     state.items.push(rec);
     renderCats(); renderCatalog();
+    scheduleSync();
     toast(`Added “${c.name || 'item'}” to your wardrobe.`);
   } catch (e) {
     console.warn('FitCheck materialize failed:', e);
     toast("Couldn't fetch that image — try again.", 'err');
   }
   tile?.classList.remove('busy');
+}
+
+/* ============================== cross-device sync (clothing library) ============================== */
+
+function syncEnabled() { return !!getSettings().syncSecret && proxyAvailable(); }
+
+function setSyncStatus(msg) { const el = $('#sync-status'); if (el) el.textContent = msg; }
+
+const itemImageUrl = it => it.imageUrl || it.source?.imageUrl || '';
+
+/* Sent up: the catalogue + only URL-backed wardrobe items (re-loadable elsewhere) + tombstones. */
+function buildLocalLibrary() {
+  return {
+    v: 1,
+    catalog: state.catalog.map(c => ({ id: c.id, name: c.name, image: c.image, albumUrl: c.albumUrl, category: c.category, host: c.host, createdAt: c.createdAt })),
+    items: state.items.filter(itemImageUrl).map(i => ({ id: i.id, cat: i.cat, name: i.name || '', imageUrl: itemImageUrl(i), source: i.source || {}, createdAt: i.createdAt })),
+    deleted: [...state.pendingDeleted],
+  };
+}
+
+let _syncTimer;
+function scheduleSync() { if (!syncEnabled()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(() => syncNow(true), 2500); }
+
+async function syncNow(silent) {
+  if (!syncEnabled()) { if (!silent) toast('Add a sync secret in Settings first (and it needs the hosted site).', 'err'); return; }
+  setSyncStatus('Syncing…');
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getSettings().syncSecret },
+      body: JSON.stringify(buildLocalLibrary()),
+    });
+    if (res.status === 401) { setSyncStatus('Secret rejected'); if (!silent) toast('Sync secret rejected — check Settings.', 'err'); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { setSyncStatus('Sync unavailable'); if (!silent) toast(data.error ? 'Sync: ' + data.error : 'Sync failed.', 'err'); return; }
+    await applyMergedLibrary(data.library);
+    state.pendingDeleted.clear();
+    setSyncStatus('Synced · just now');
+    if (!silent) toast('Synced.');
+  } catch (e) {
+    console.warn('FitCheck sync failed:', e);
+    setSyncStatus('Sync failed');
+    if (!silent) toast('Sync failed — try again.', 'err');
+  }
+}
+
+/* Bring local state in line with the merged library the server returned. */
+async function applyMergedLibrary(lib) {
+  const cat = Array.isArray(lib?.catalog) ? lib.catalog : [];
+  const items = Array.isArray(lib?.items) ? lib.items : [];
+  // catalogue: replace local set with the merged one
+  const mergedCatIds = new Set(cat.map(c => c.id));
+  for (const c of state.catalog) if (!mergedCatIds.has(c.id)) { try { await dbDel('catalog', c.id); } catch {} }
+  const localCatIds = new Set(state.catalog.map(c => c.id));
+  for (const c of cat) if (!localCatIds.has(c.id)) { try { await dbPut('catalog', c); } catch {} }
+  state.catalog = cat.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  // items: drop synced-but-now-gone (deleted elsewhere); re-materialise new ones
+  const mergedItemIds = new Set(items.map(i => i.id));
+  for (const it of state.items.slice()) {
+    if (itemImageUrl(it) && !mergedItemIds.has(it.id)) {
+      try { await dbDel('items', it.id); } catch {}
+      state.items = state.items.filter(x => x.id !== it.id);
+    }
+  }
+  const localItemIds = new Set(state.items.map(i => i.id));
+  for (const meta of items) {
+    if (localItemIds.has(meta.id) || !meta.imageUrl) continue;
+    try {
+      const r = await fetch('/api/import?img=' + encodeURIComponent(meta.imageUrl));
+      if (!r.ok) throw new Error('proxy ' + r.status);
+      const { dataUrl } = await resizeFile(await r.blob(), ITEM_MAX_DIM);
+      const rec = { id: meta.id, cat: meta.cat || 'other', dataUrl, name: meta.name || '', imageUrl: meta.imageUrl, source: meta.source || {}, createdAt: meta.createdAt || Date.now() };
+      await dbPut('items', rec);
+      state.items.push(rec);
+    } catch (e) { console.warn('FitCheck sync re-materialise failed:', meta.id, e); }
+  }
+  state.items.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  renderAll();
 }
 
 async function generate() {
@@ -913,6 +1000,7 @@ document.addEventListener('click', e => {
         state.items = state.items.filter(i => i.id !== id);
         const set = item && state.sel.get(item.cat);
         if (set) { set.delete(id); if (!set.size) state.sel.delete(item.cat); }
+        if (item && itemImageUrl(item)) { state.pendingDeleted.add(id); scheduleSync(); }   // tombstone synced items
         renderCats(); renderHair(); renderOutfitBar();
       });
       break;
@@ -923,15 +1011,17 @@ document.addEventListener('click', e => {
       armThen(el, async () => {
         await dbDel('catalog', id);
         state.catalog = state.catalog.filter(c => c.id !== id);
+        state.pendingDeleted.add(id); scheduleSync();
         renderCatalog();
       });
       break;
     case 'clear-catalog':
       if (state.catalog.length && confirm(`Remove all ${state.catalog.length} catalogued items? Your wardrobe stays untouched.`)) {
         (async () => {
-          for (const c of state.catalog) { try { await dbDel('catalog', c.id); } catch {} }
+          for (const c of state.catalog) { try { await dbDel('catalog', c.id); } catch {} state.pendingDeleted.add(c.id); }
           state.catalog = []; state.catalogFilter = '';
           renderCatalog();
+          scheduleSync();
           toast('Catalogue cleared.');
         })();
       }
@@ -969,12 +1059,15 @@ document.addEventListener('click', e => {
     case 'save-settings': {
       const s = getSettings();
       s.apiKey = $('#set-key').value.trim();
+      s.syncSecret = ($('#sync-secret')?.value || '').trim();
       saveSettings(s);
       closeModals();
       renderOutfitBar(); renderBanner();
       toast('Settings saved.');
+      if (syncEnabled()) syncNow(false);
       break;
     }
+    case 'sync-now': syncNow(false); break;
   }
 });
 
@@ -1021,4 +1114,5 @@ $('#file-input').addEventListener('change', async e => {
     toast('Storage unavailable — uploads won\'t persist. Are you in a private window?', 'err');
   }
   renderAll();
+  if (syncEnabled()) syncNow(true);   // pull the library (and flush local) on load
 })();

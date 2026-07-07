@@ -45,7 +45,9 @@ To host it (for example, to use on your phone), it deploys to Vercel with an `/a
 
 ## Privacy
 
-Your photos stay in your browser (IndexedDB). The only time an image leaves your machine is the API call to Google that generates the picture — there's no server, account, or tracking. Clearing your browser data removes everything.
+Your photos stay in your browser (IndexedDB). The only time an image leaves your machine is the API call to Google that generates the picture — there's no account or tracking. Clearing your browser data removes everything.
+
+Optional **cross-device sync** (off by default): set a sync secret in Settings and your *clothing library* — the catalogue and the wardrobe items imported by link — is mirrored as metadata (titles, links, categories — no image files) to your own private storage, so it's the same on every device. Your photos of yourself, generated looks, and manually uploaded files never leave the device.
 
 ## Notes
 
