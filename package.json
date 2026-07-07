@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "name": "fitcheck",
+  "scripts": {
+    "test": "node --test"
+  }
+}
