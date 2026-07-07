@@ -128,3 +128,21 @@ export function guessCategory(text) {
   for (const [key, re] of CAT_KEYWORDS) if (re.test(t)) return key;
   return 'other';
 }
+
+/* ---- per-host high-res refinement (the "tuned favorites") ----
+   Each rule rewrites the image URL to request a bigger render. Rewrites use
+   String.replace, so a non-matching pattern returns the URL unchanged (safe
+   fallback). The exact param/segment shapes below are the common ones for
+   each CDN; verify against a live product page and adjust if a shop changed. */
+const HOST_RULES = [
+  { match: /uniqlo\.com/i, hi: u => u.replace(/([?&](?:w|width)=)\d+/i, '$12000') },
+  { match: /zara\.(net|com)/i, hi: u => u.replace(/([?&]w=)\d+/i, '$11500') },
+  { match: /(mngbcn|mango)\.com/i, hi: u => u.replace(/([?&]imwidth=)\d+/i, '$11200') },
+  { match: /cos\.com|cosstores|hmcdn/i, hi: u => u.replace(/([?&]imwidth=)\d+/i, '$11200') },
+];
+export function refineForHost(host, product) {
+  const rule = HOST_RULES.find(r => r.match.test(host) || (product.images || []).some(i => r.match.test(i.url)));
+  if (!rule) return product;
+  const images = (product.images || []).map(i => { try { return { ...i, url: rule.hi(i.url) }; } catch { return i; } });
+  return { ...product, images };
+}

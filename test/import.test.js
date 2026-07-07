@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { guardUrl, extractProduct, guessCategory } from '../api/import.js';
+import { guardUrl, extractProduct, guessCategory, refineForHost } from '../api/import.js';
 
 test('guardUrl accepts a normal https product URL', () => {
   const g = guardUrl('https://www.zara.com/us/en/shirt-p123.html');
@@ -83,4 +83,20 @@ test('guessCategory maps keywords to FitCheck categories', () => {
   assert.equal(guessCategory('Gold Pendant Necklace'), 'necklace');
   assert.equal(guessCategory('Silver Cuff Bracelet'), 'bracelet');
   assert.equal(guessCategory('Scented Candle'), 'other');
+});
+
+test('refineForHost bumps Zara image width', () => {
+  const out = refineForHost('www.zara.com', { images: [{ url: 'https://static.zara.net/photos/x.jpg?ts=1&w=563', kind: 'packshot' }] });
+  assert.match(out.images[0].url, /w=1500/);
+});
+
+test('refineForHost leaves unknown hosts untouched', () => {
+  const input = { images: [{ url: 'https://cdn.random.com/x.jpg', kind: 'og' }] };
+  const out = refineForHost('random.com', input);
+  assert.equal(out.images[0].url, 'https://cdn.random.com/x.jpg');
+});
+
+test('refineForHost is non-destructive when the pattern does not match', () => {
+  const out = refineForHost('www.zara.com', { images: [{ url: 'https://static.zara.net/photos/x.jpg', kind: 'packshot' }] });
+  assert.equal(out.images[0].url, 'https://static.zara.net/photos/x.jpg');
 });
