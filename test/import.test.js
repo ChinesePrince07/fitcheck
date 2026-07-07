@@ -24,6 +24,9 @@ test('guardUrl rejects localhost and private/metadata hosts', () => {
     'http://169.254.169.254/latest/meta-data',
     'http://metadata.google.internal/x',
     'http://[::1]/x',
+    'http://[::ffff:127.0.0.1]/x',
+    'http://[::ffff:7f00:1]/x',
+    'http://[::ffff:169.254.169.254]/x',
   ]) {
     assert.equal(guardUrl(u).ok, false, u);
   }

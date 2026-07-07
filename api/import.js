@@ -19,6 +19,16 @@ function isPrivateIp(h) {
     return false;
   }
   const lh = h.toLowerCase().replace(/^\[|\]$/g, '');
+  const mapped = lh.match(/^::ffff:(.+)$/i);   // IPv4-mapped IPv6 → fold to embedded IPv4 and re-check
+  if (mapped) {
+    const emb = mapped[1];
+    if (emb.includes('.')) return isPrivateIp(emb);
+    const hx = emb.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (hx) {
+      const hi = parseInt(hx[1], 16), lo = parseInt(hx[2], 16);
+      return isPrivateIp(`${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`);
+    }
+  }
   if (lh === '::1' || lh === '::') return true;
   if (/^f[cd][0-9a-f]{2}:/.test(lh)) return true;   // fc00::/7 unique-local
   if (/^fe[89ab][0-9a-f]:/.test(lh)) return true;   // fe80::/10 link-local
