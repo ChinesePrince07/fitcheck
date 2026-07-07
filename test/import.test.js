@@ -77,6 +77,8 @@ test('extractProduct returns no images when the page has none', () => {
 test('guessCategory maps keywords to FitCheck categories', () => {
   assert.equal(guessCategory('Oversized Cotton Shirt'), 'top');
   assert.equal(guessCategory('Slim Chino Trousers'), 'bottom');
+  assert.equal(guessCategory('Cargo Shorts'), 'bottom');
+  assert.equal(guessCategory('Short Sleeve Shirt'), 'top');
   assert.equal(guessCategory('Leather Chelsea Boots'), 'shoes');
   assert.equal(guessCategory('Wool Overcoat'), 'outer');
   assert.equal(guessCategory('Ribbed Beanie'), 'hat');

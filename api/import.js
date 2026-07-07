@@ -116,7 +116,7 @@ export function extractProduct(html, baseUrl) {
 const CAT_KEYWORDS = [
   ['shoes',    /\b(sneaker|trainer|shoe|boot|loafer|heel|sandal|footwear|moccasin|derby|brogue)s?\b/i],
   ['outer',    /\b(coat|jacket|blazer|parka|overcoat|outerwear|gilet|cardigan|puffer|windbreaker|trench)s?\b/i],
-  ['bottom',   /\b(jean|trouser|pant|chino|short|skirt|legging|jogger|slack|culotte)s?\b/i],
+  ['bottom',   /\b(jean|trouser|pant|chino|shorts|skirt|legging|jogger|slack|culotte)s?\b/i],
   ['hat',      /\b(hat|beanie|cap|bucket|balaclava)s?\b/i],
   ['watch',    /\bwatch(?:es)?\b/i],
   ['necklace', /\b(necklace|pendant)s?\b/i],
