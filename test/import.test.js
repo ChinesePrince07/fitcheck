@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { guardUrl, extractProduct, guessCategory, refineForHost } from '../api/import.js';
+import { guardUrl, extractProduct, guessCategory, refineForHost, guardedFetch } from '../api/import.js';
 import handler from '../api/import.js';
 
 test('guardUrl accepts a normal https product URL', () => {
@@ -119,4 +119,39 @@ test('handler 400s on a blocked image host (SSRF guard, no network hit)', async 
 test('handler 400s on a blocked page host', async () => {
   const res = await handler(new Request('https://site/api/import?url=' + encodeURIComponent('http://localhost/admin')));
   assert.equal(res.status, 400);
+});
+
+test('guardedFetch throws when a redirect points at a private host', async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest' } });
+  try {
+    await assert.rejects(() => guardedFetch('https://shop.com/x', {}), /blocked-redirect/);
+  } finally { globalThis.fetch = orig; }
+});
+
+test('guardedFetch follows an allowed redirect to its final response', async () => {
+  const orig = globalThis.fetch; let n = 0;
+  globalThis.fetch = async () => (n++ === 0)
+    ? new Response(null, { status: 301, headers: { location: 'https://cdn.other.com/final' } })
+    : new Response('ok', { status: 200 });
+  try {
+    const res = await guardedFetch('https://shop.com/x', {});
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), 'ok');
+  } finally { globalThis.fetch = orig; }
+});
+
+test('handler returns friendly 200 when the HTML body read fails', async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true, status: 200,
+    headers: new Headers({ 'content-type': 'text/html' }),
+    text: async () => { throw new Error('body read aborted'); },
+  });
+  try {
+    const res = await handler(new Request('https://site/api/import?url=' + encodeURIComponent('https://shop.com/p/1')));
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, false);
+  } finally { globalThis.fetch = orig; }
 });

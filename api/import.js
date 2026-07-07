@@ -158,6 +158,27 @@ const FETCH_HEADERS = {
 };
 const json = (obj, status) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
 
+/* Fetch that re-applies guardUrl to every redirect hop — fetch's own redirect:'follow'
+   would chase a 3xx into a private/metadata host and defeat the SSRF guard. */
+export async function guardedFetch(startUrl, opts, maxHops = 4) {
+  let url = startUrl;
+  for (let i = 0; i < maxHops; i++) {
+    const res = await fetch(url, { ...opts, redirect: 'manual' });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) return res;
+      let next;
+      try { next = new URL(loc, url).href; } catch { return res; }
+      const g = guardUrl(next);
+      if (!g.ok) throw new Error('blocked-redirect');
+      url = g.url.href;
+      continue;
+    }
+    return res;
+  }
+  throw new Error('too-many-redirects');
+}
+
 export default async function handler(req) {
   let params;
   try { params = new URL(req.url).searchParams; } catch { return json({ ok: false, reason: 'bad-request' }, 400); }
@@ -173,11 +194,12 @@ async function importMeta(raw) {
   if (!g.ok) return json({ ok: false, reason: g.reason }, 400);
   let res;
   try {
-    res = await fetch(g.url.href, { headers: FETCH_HEADERS, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    res = await guardedFetch(g.url.href, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(8000) });
   } catch { return json({ ok: false, reason: 'blocked' }, 200); }
   if (!res.ok) return json({ ok: false, reason: 'blocked' }, 200);
   if (!/html|xml/i.test(res.headers.get('content-type') || '')) return json({ ok: false, reason: 'not-html' }, 200);
-  let html = await res.text();
+  let html;
+  try { html = await res.text(); } catch { return json({ ok: false, reason: 'blocked' }, 200); }
   if (html.length > MAX_HTML) html = html.slice(0, MAX_HTML);
   let product = extractProduct(html, g.url.href);
   product = refineForHost(g.url.hostname, product);
@@ -195,7 +217,7 @@ async function proxyImage(raw) {
   if (!g.ok) return json({ ok: false, reason: g.reason }, 400);
   let res;
   try {
-    res = await fetch(g.url.href, { headers: { ...FETCH_HEADERS, Accept: 'image/*', Referer: g.url.origin + '/' }, redirect: 'follow', signal: AbortSignal.timeout(10000) });
+    res = await guardedFetch(g.url.href, { headers: { ...FETCH_HEADERS, Accept: 'image/*', Referer: g.url.origin + '/' }, signal: AbortSignal.timeout(10000) });
   } catch { return json({ ok: false, reason: 'blocked' }, 502); }
   if (!res.ok) return json({ ok: false, reason: 'blocked' }, 502);
   const ct = res.headers.get('content-type') || '';
