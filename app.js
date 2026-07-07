@@ -659,18 +659,32 @@ async function addImported() {
 async function importStoreFromUrl(raw) {
   const btn = $('#import-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Reading store…'; }
-  let meta;
+  // paginate page-by-page (server returns one page per call); stop when a page is empty or repeats
+  const found = [];
+  const seenAlbum = new Set();
+  let host = '';
   try {
-    const res = await fetch('/api/import?store=' + encodeURIComponent(raw));
-    meta = await res.json().catch(() => ({ ok: false }));
-  } catch { meta = { ok: false }; }
+    for (let page = 1; page <= 40; page++) {
+      const u = new URL(raw); u.searchParams.set('page', String(page));
+      const res = await fetch('/api/import?store=' + encodeURIComponent(u.href));
+      const meta = await res.json().catch(() => ({ ok: false }));
+      if (!meta.ok) break;
+      host = meta.store?.host || host;
+      const fresh = (meta.items || []).filter(it => !seenAlbum.has(it.albumUrl));
+      if (!fresh.length) break;
+      fresh.forEach(it => seenAlbum.add(it.albumUrl));
+      found.push(...fresh);
+      if (btn) btn.textContent = `Reading store… ${found.length}`;
+      if (found.length >= 3000) break;   // safety cap
+    }
+  } catch { /* keep whatever we gathered */ }
   if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
-  if (!meta.ok || !meta.items?.length) { toast("Couldn't read that store page.", 'err'); return; }
+  if (!found.length) { toast("Couldn't read that store page.", 'err'); return; }
 
   const seen = new Set(state.items.filter(i => i.source?.url).map(i => i.source.url));
-  const todo = meta.items.filter(it => !seen.has(it.albumUrl));
-  if (!todo.length) { toast(`All ${meta.total} items from that store are already in your wardrobe.`); return; }
-  if (!confirm(`Import ${todo.length} items from ${meta.store?.host || 'this store'} into your wardrobe?\n\nThis downloads ${todo.length} images and can take a few minutes.`)) return;
+  const todo = found.filter(it => !seen.has(it.albumUrl));
+  if (!todo.length) { toast(`All ${found.length} items from that store are already in your wardrobe.`); return; }
+  if (!confirm(`Import ${todo.length} items from ${host || 'this store'} into your wardrobe?\n\nThis downloads ${todo.length} images and can take a few minutes.`)) return;
 
   let done = 0, failed = 0;
   const CONCURRENCY = 5;
@@ -685,7 +699,7 @@ async function importStoreFromUrl(raw) {
         const { dataUrl } = await resizeFile(await res.blob(), ITEM_MAX_DIM);
         const rec = {
           id: uid(), cat: it.category || 'other', dataUrl, name: it.name || '',
-          source: { name: it.name || '', price: null, currency: '', host: meta.store?.host || '', url: it.albumUrl },
+          source: { name: it.name || '', price: null, currency: '', host: host || '', url: it.albumUrl },
           createdAt: Date.now(),
         };
         await dbPut('items', rec);
@@ -698,7 +712,7 @@ async function importStoreFromUrl(raw) {
   }
   if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
   renderAll();
-  toast(`Imported ${done} item${done !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''} from ${meta.store?.host || 'the store'}.`);
+  toast(`Imported ${done} item${done !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''} from ${host || 'the store'}.`);
 }
 
 async function generate() {

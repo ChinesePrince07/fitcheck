@@ -251,28 +251,18 @@ export function extractYupooStore(html, baseUrl) {
   return out;
 }
 
-const STORE_MAX_PAGES = 20;
-const STORE_MAX_ITEMS = 2000;
-
+/* Fetch ONE store page and return its album cards. The client paginates (calls this
+   with ?page=1,2,… until empty) — one page per request keeps each call well under the
+   Edge function's time limit even when the store host is slow / far away. */
 async function importStore(raw) {
   const g = guardUrl(raw);
   if (!g.ok) return json({ ok: false, reason: g.reason }, 400);
-  const items = [];
-  const seen = new Set();
-  for (let page = 1; page <= STORE_MAX_PAGES; page++) {
-    const pageUrl = new URL(g.url.href);
-    pageUrl.searchParams.set('page', String(page));
-    let res;
-    try { res = await guardedFetch(pageUrl.href, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(12000) }); }
-    catch { break; }
-    if (!res.ok) break;
-    let html;
-    try { html = await res.text(); } catch { break; }
-    const fresh = extractYupooStore(html, g.url.href).filter(it => !seen.has(it.albumUrl));
-    if (!fresh.length) break;                                 // empty or a repeat of a prior page => past the end
-    for (const it of fresh) { seen.add(it.albumUrl); items.push(it); }
-    if (items.length >= STORE_MAX_ITEMS) break;
-  }
-  if (!items.length) return json({ ok: false, reason: 'no-albums' }, 200);
-  return json({ ok: true, store: { host: g.url.hostname.replace(/^www\./, '') }, total: items.length, items }, 200);
+  let res;
+  try { res = await guardedFetch(g.url.href, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) }); }
+  catch { return json({ ok: false, reason: 'blocked' }, 200); }
+  if (!res.ok) return json({ ok: false, reason: 'blocked' }, 200);
+  let html;
+  try { html = await res.text(); } catch { return json({ ok: false, reason: 'blocked' }, 200); }
+  const items = extractYupooStore(html, g.url.href);
+  return json({ ok: true, store: { host: g.url.hostname.replace(/^www\./, '') }, items }, 200);
 }
