@@ -540,6 +540,7 @@ function openSettings() {
 function closeModals() {
   document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
   state.currentLookId = null;
+  state.importMeta = null;
 }
 
 /* ============================== actions ============================== */

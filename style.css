@@ -350,6 +350,7 @@ section { margin: 0; }
   #viewer-img { max-height: 68vh; }
   .viewer-meta { margin: 8px 0 2px; }
   .tile .del { opacity: 1; }
+  .tile .shop { opacity: 1; }
 }
 
 /* ---------- shop-URL import ---------- */
