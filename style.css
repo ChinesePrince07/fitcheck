@@ -374,3 +374,15 @@ section { margin: 0; }
 }
 .tile:hover .shop { opacity: 1; }
 .shop-chip { text-decoration: none; }
+
+/* ---------- store catalogue ---------- */
+.catalog-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.catalog-bar input { flex: 1; min-width: 0; padding: 8px 12px; background: var(--paper-3); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; font-family: var(--sans); font-size: 12.5px; }
+.catalog-bar input:focus { outline: none; border-color: var(--gold); }
+.catalog-bar .count { color: var(--ink-soft); font-family: var(--serif); font-style: italic; font-size: 13px; white-space: nowrap; }
+/* #id beats the mobile `.grid` horizontal-slider rule: keep the catalogue a scrollable wrapping grid at every width */
+#catalog-grid { display: grid; grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; overflow-x: hidden; overflow-y: auto; max-height: 62vh; padding-right: 2px; }
+.catalog-tile.added { opacity: .5; }
+.catalog-tile.added .name { color: var(--gold-br); }
+.catalog-tile.busy { opacity: .45; pointer-events: none; }
+.catalog-tile.busy::after { content: '…'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--gold-br); background: rgba(21,42,32,.35); }

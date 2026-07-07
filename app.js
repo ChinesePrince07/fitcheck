@@ -81,6 +81,8 @@ const state = {
   uploadCat: null,         // null => uploading a photo of you
   currentLookId: null,     // look open in viewer
   importMeta: null,        // { pageUrl, source, images:[{url,kind}], cat, chosen:Set<idx> } while the import modal is open
+  catalog: [],             // lightweight store entries { id, name, image, albumUrl, category, host, createdAt } — no image data
+  catalogFilter: '',       // name filter for the Catalogue grid
 };
 
 function getSettings() {
@@ -156,9 +158,9 @@ function comboCount() {
 let _db;
 function db() {
   _db ??= new Promise((res, rej) => {
-    const req = indexedDB.open('fitcheck', 1);
+    const req = indexedDB.open('fitcheck', 2);
     req.onupgradeneeded = () => {
-      for (const store of ['photos', 'items', 'looks']) {
+      for (const store of ['photos', 'items', 'looks', 'catalog']) {
         if (!req.result.objectStoreNames.contains(store)) {
           req.result.createObjectStore(store, { keyPath: 'id' });
         }
@@ -454,6 +456,27 @@ function renderScene() {
   ).join('');
 }
 
+function renderCatalog() {
+  const sec = $('#catalog-section');
+  if (!sec) return;
+  if (!state.catalog.length) { sec.hidden = true; return; }
+  sec.hidden = false;
+  const f = (state.catalogFilter || '').trim().toLowerCase();
+  const list = f ? state.catalog.filter(c => (c.name || '').toLowerCase().includes(f)) : state.catalog;
+  const added = new Set(state.items.filter(i => i.source?.url).map(i => i.source.url));
+  const count = $('#catalog-count');
+  if (count) count.textContent = `${list.length}${f ? ' of ' + state.catalog.length : ''} item${list.length !== 1 ? 's' : ''}`;
+  $('#catalog-grid').innerHTML = list.map(c => {
+    const isAdded = added.has(c.albumUrl);
+    return `<div class="tile catalog-tile ${isAdded ? 'added' : ''}" data-action="add-catalog" data-id="${c.id}" role="button" tabindex="0" title="${isAdded ? 'Already in your wardrobe' : 'Add to wardrobe'}">
+      <img src="/api/import?img=${encodeURIComponent(c.image)}" alt="${esc(c.name || 'item')}" loading="lazy">
+      <button class="del" data-action="del-catalog" data-id="${c.id}" title="Remove">✕</button>
+      ${c.albumUrl ? `<a class="shop" href="${esc(c.albumUrl)}" target="_blank" rel="noopener" title="View at ${esc(c.host || 'store')}">↗</a>` : ''}
+      <span class="name">${isAdded ? '✓ ' : ''}${esc(c.name || catByKey(c.category).label)}</span>
+    </div>`;
+  }).join('');
+}
+
 function renderLooks() {
   const g = $('#looks-grid');
   if (!state.looks.length) {
@@ -504,6 +527,7 @@ function renderAll() {
   renderCats();
   renderHair();
   renderScene();
+  renderCatalog();
   renderLooks();
   renderOutfitBar();
   renderBanner();
@@ -653,66 +677,72 @@ async function addImported() {
   toast(ok ? `Added ${ok} item${ok > 1 ? 's' : ''} from ${host}.` : "Couldn't fetch that image — try again.", ok ? '' : 'err');
 }
 
-/* Bulk-import a whole Yupoo store/category: list every album, then download each
-   cover through the proxy into a wardrobe item. Dedupes by album URL so re-running
-   a store only adds what's new. Modest concurrency keeps hundreds of items sane. */
+/* Catalogue a whole Yupoo store/category: paginate its album cards and store only the
+   lightweight entry (title, cover URL, album link, guessed category) — no image download.
+   Browse them in the Catalogue section; each piece materialises into a real wardrobe item
+   only when tapped. Dedupes by album URL so re-running a store adds only what's new. */
 async function importStoreFromUrl(raw) {
   const btn = $('#import-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Reading store…'; }
-  // paginate page-by-page (server returns one page per call); stop when a page is empty or repeats
   const found = [];
-  const seenAlbum = new Set();
+  const seenAlbum = new Set(state.catalog.map(c => c.albumUrl));   // skip anything already catalogued
   let host = '';
   try {
     for (let page = 1; page <= 40; page++) {
       const u = new URL(raw); u.searchParams.set('page', String(page));
       const res = await fetch('/api/import?store=' + encodeURIComponent(u.href));
       const meta = await res.json().catch(() => ({ ok: false }));
-      if (!meta.ok) break;
+      if (!meta.ok || !meta.items?.length) break;
       host = meta.store?.host || host;
-      const fresh = (meta.items || []).filter(it => !seenAlbum.has(it.albumUrl));
-      if (!fresh.length) break;
-      fresh.forEach(it => seenAlbum.add(it.albumUrl));
-      found.push(...fresh);
+      let anyNew = false;
+      for (const it of meta.items) {
+        if (seenAlbum.has(it.albumUrl)) continue;
+        seenAlbum.add(it.albumUrl); anyNew = true;
+        found.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', host, createdAt: Date.now() });
+      }
+      if (!anyNew) break;                       // page repeated a prior one => past the end
       if (btn) btn.textContent = `Reading store… ${found.length}`;
-      if (found.length >= 3000) break;   // safety cap
+      if (state.catalog.length + found.length >= 3000) break;   // safety cap
     }
   } catch { /* keep whatever we gathered */ }
   if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
-  if (!found.length) { toast("Couldn't read that store page.", 'err'); return; }
-
-  const seen = new Set(state.items.filter(i => i.source?.url).map(i => i.source.url));
-  const todo = found.filter(it => !seen.has(it.albumUrl));
-  if (!todo.length) { toast(`All ${found.length} items from that store are already in your wardrobe.`); return; }
-  if (!confirm(`Import ${todo.length} items from ${host || 'this store'} into your wardrobe?\n\nThis downloads ${todo.length} images and can take a few minutes.`)) return;
-
-  let done = 0, failed = 0;
-  const CONCURRENCY = 5;
-  const setBtn = t => { if (btn) btn.textContent = t; };
-  setBtn(`Importing 0/${todo.length}…`);
-  if (btn) btn.disabled = true;
-  for (let i = 0; i < todo.length; i += CONCURRENCY) {
-    await Promise.all(todo.slice(i, i + CONCURRENCY).map(async it => {
-      try {
-        const res = await fetch('/api/import?img=' + encodeURIComponent(it.image));
-        if (!res.ok) throw new Error('proxy ' + res.status);
-        const { dataUrl } = await resizeFile(await res.blob(), ITEM_MAX_DIM);
-        const rec = {
-          id: uid(), cat: it.category || 'other', dataUrl, name: it.name || '',
-          source: { name: it.name || '', price: null, currency: '', host: host || '', url: it.albumUrl },
-          createdAt: Date.now(),
-        };
-        await dbPut('items', rec);
-        state.items.push(rec);
-        done++;
-      } catch (e) { console.warn('FitCheck store import failed:', it.albumUrl, e); failed++; }
-    }));
-    setBtn(`Importing ${done}/${todo.length}…`);
-    if (i % 30 === 0) renderCats();          // let tiles trickle in
+  if (!found.length) {
+    toast(state.catalog.length ? 'No new items — that store is already catalogued.' : "Couldn't read that store page.", state.catalog.length ? '' : 'err');
+    return;
   }
-  if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
-  renderAll();
-  toast(`Imported ${done} item${done !== 1 ? 's' : ''}${failed ? `, ${failed} failed` : ''} from ${host || 'the store'}.`);
+  for (const c of found) { try { await dbPut('catalog', c); } catch {} }
+  state.catalog.push(...found);
+  renderCatalog();
+  $('#catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast(`Catalogued ${found.length} item${found.length !== 1 ? 's' : ''} from ${host || 'the store'} — browse them below, tap to add.`);
+}
+
+/* Pull one catalogued item's cover through the proxy, resize, and store it as a real
+   wardrobe item (the only point an image is actually downloaded). */
+async function materializeCatalog(id) {
+  const c = state.catalog.find(x => x.id === id);
+  if (!c) return;
+  if (state.items.some(i => i.source?.url === c.albumUrl)) { toast('Already in your wardrobe.'); return; }
+  const tile = document.querySelector(`.catalog-tile[data-id="${id}"]`);
+  tile?.classList.add('busy');
+  try {
+    const res = await fetch('/api/import?img=' + encodeURIComponent(c.image));
+    if (!res.ok) throw new Error('proxy ' + res.status);
+    const { dataUrl } = await resizeFile(await res.blob(), ITEM_MAX_DIM);
+    const rec = {
+      id: uid(), cat: c.category || 'other', dataUrl, name: c.name || '',
+      source: { name: c.name || '', price: null, currency: '', host: c.host || '', url: c.albumUrl },
+      createdAt: Date.now(),
+    };
+    await dbPut('items', rec);
+    state.items.push(rec);
+    renderCats(); renderCatalog();
+    toast(`Added “${c.name || 'item'}” to your wardrobe.`);
+  } catch (e) {
+    console.warn('FitCheck materialize failed:', e);
+    toast("Couldn't fetch that image — try again.", 'err');
+  }
+  tile?.classList.remove('busy');
 }
 
 async function generate() {
@@ -887,6 +917,25 @@ document.addEventListener('click', e => {
       });
       break;
     case 'generate': generate(); break;
+    case 'add-catalog': materializeCatalog(id); break;
+    case 'del-catalog':
+      e.stopPropagation();
+      armThen(el, async () => {
+        await dbDel('catalog', id);
+        state.catalog = state.catalog.filter(c => c.id !== id);
+        renderCatalog();
+      });
+      break;
+    case 'clear-catalog':
+      if (state.catalog.length && confirm(`Remove all ${state.catalog.length} catalogued items? Your wardrobe stays untouched.`)) {
+        (async () => {
+          for (const c of state.catalog) { try { await dbDel('catalog', c.id); } catch {} }
+          state.catalog = []; state.catalogFilter = '';
+          renderCatalog();
+          toast('Catalogue cleared.');
+        })();
+      }
+      break;
     case 'import-url': importFromUrl(); break;
     case 'toggle-import-img': {
       const i = +el.dataset.idx;
@@ -931,6 +980,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('input', e => {
   if (e.target.id === 'notes-input') state.notes = e.target.value;
+  if (e.target.id === 'catalog-filter') { state.catalogFilter = e.target.value; renderCatalog(); }
 });
 
 document.addEventListener('change', e => {
@@ -958,10 +1008,11 @@ $('#file-input').addEventListener('change', async e => {
 
 (async function init() {
   try {
-    [state.photos, state.items, state.looks] = await Promise.all([dbAll('photos'), dbAll('items'), dbAll('looks')]);
+    [state.photos, state.items, state.looks, state.catalog] = await Promise.all([dbAll('photos'), dbAll('items'), dbAll('looks'), dbAll('catalog')]);
     state.photos.sort((a, b) => a.createdAt - b.createdAt);
     state.items.sort((a, b) => a.createdAt - b.createdAt);
     state.looks.sort((a, b) => b.createdAt - a.createdAt);
+    state.catalog.sort((a, b) => a.createdAt - b.createdAt);
     if (!state.photos.some(p => p.id === state.activePhotoId)) {
       state.activePhotoId = state.photos[0]?.id || null;
     }
