@@ -146,3 +146,61 @@ export function refineForHost(host, product) {
   const images = (product.images || []).map(i => { try { return { ...i, url: rule.hi(i.url) }; } catch { return i; } });
   return { ...product, images };
 }
+
+/* ---- request handler ---- */
+
+const MAX_HTML = 2_000_000;
+const MAX_IMG = 10_000_000;
+const FETCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+const json = (obj, status) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
+
+export default async function handler(req) {
+  let params;
+  try { params = new URL(req.url).searchParams; } catch { return json({ ok: false, reason: 'bad-request' }, 400); }
+  const img = params.get('img');
+  const page = params.get('url');
+  if (img) return proxyImage(img);
+  if (page) return importMeta(page);
+  return json({ ok: false, reason: 'missing-param' }, 400);
+}
+
+async function importMeta(raw) {
+  const g = guardUrl(raw);
+  if (!g.ok) return json({ ok: false, reason: g.reason }, 400);
+  let res;
+  try {
+    res = await fetch(g.url.href, { headers: FETCH_HEADERS, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+  } catch { return json({ ok: false, reason: 'blocked' }, 200); }
+  if (!res.ok) return json({ ok: false, reason: 'blocked' }, 200);
+  if (!/html|xml/i.test(res.headers.get('content-type') || '')) return json({ ok: false, reason: 'not-html' }, 200);
+  let html = await res.text();
+  if (html.length > MAX_HTML) html = html.slice(0, MAX_HTML);
+  let product = extractProduct(html, g.url.href);
+  product = refineForHost(g.url.hostname, product);
+  if (!product.images.length) return json({ ok: false, reason: 'no-data' }, 200);
+  return json({
+    ok: true,
+    source: { name: product.name, price: product.price, currency: product.currency, host: g.url.hostname.replace(/^www\./, '') },
+    images: product.images,
+    suggestedCategory: guessCategory(`${product.name || ''} ${product.breadcrumb || ''}`),
+  }, 200);
+}
+
+async function proxyImage(raw) {
+  const g = guardUrl(raw);
+  if (!g.ok) return json({ ok: false, reason: g.reason }, 400);
+  let res;
+  try {
+    res = await fetch(g.url.href, { headers: { ...FETCH_HEADERS, Accept: 'image/*', Referer: g.url.origin + '/' }, redirect: 'follow', signal: AbortSignal.timeout(10000) });
+  } catch { return json({ ok: false, reason: 'blocked' }, 502); }
+  if (!res.ok) return json({ ok: false, reason: 'blocked' }, 502);
+  const ct = res.headers.get('content-type') || '';
+  if (!/^image\//i.test(ct)) return json({ ok: false, reason: 'not-image' }, 415);
+  const len = res.headers.get('content-length');
+  if (len && Number(len) > MAX_IMG) return json({ ok: false, reason: 'too-large' }, 413);
+  return new Response(res.body, { status: 200, headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=3600' } });
+}

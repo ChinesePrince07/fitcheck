@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guardUrl, extractProduct, guessCategory, refineForHost } from '../api/import.js';
+import handler from '../api/import.js';
 
 test('guardUrl accepts a normal https product URL', () => {
   const g = guardUrl('https://www.zara.com/us/en/shirt-p123.html');
@@ -99,4 +100,23 @@ test('refineForHost leaves unknown hosts untouched', () => {
 test('refineForHost is non-destructive when the pattern does not match', () => {
   const out = refineForHost('www.zara.com', { images: [{ url: 'https://static.zara.net/photos/x.jpg', kind: 'packshot' }] });
   assert.equal(out.images[0].url, 'https://static.zara.net/photos/x.jpg');
+});
+
+test('handler 400s when neither url nor img is given', async () => {
+  const res = await handler(new Request('https://site/api/import'));
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.ok, false);
+});
+
+test('handler 400s on a blocked image host (SSRF guard, no network hit)', async () => {
+  const res = await handler(new Request('https://site/api/import?img=' + encodeURIComponent('http://169.254.169.254/latest')));
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.reason, 'blocked-host');
+});
+
+test('handler 400s on a blocked page host', async () => {
+  const res = await handler(new Request('https://site/api/import?url=' + encodeURIComponent('http://localhost/admin')));
+  assert.equal(res.status, 400);
 });
