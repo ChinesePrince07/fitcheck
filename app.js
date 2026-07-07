@@ -56,6 +56,7 @@ const MODEL_NAMES = {
 // Always use the best model + highest resolution available (no in-app selection).
 const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — strongest identity preservation for try-on
 const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and lighter on mobile (was 4K)
+const CLASSIFY_MODEL = 'gemini-flash-latest';   // cheap vision model to categorise a garment from its photo
 const DEFAULT_SETTINGS = {
   provider: 'gemini',
   apiKey: '',
@@ -724,8 +725,28 @@ async function importStoreFromUrl(raw) {
   toast(`Catalogued ${found.length} item${found.length !== 1 ? 's' : ''} from ${host || 'the store'} — browse them below, tap to add.`);
 }
 
-/* Pull one catalogued item's cover through the proxy, resize, and store it as a real
-   wardrobe item (the only point an image is actually downloaded). */
+/* Ask the vision model which category a garment photo is — titles (Yupoo SKU codes)
+   rarely say. Returns a category key, or null to fall back to the title guess.
+   Routes through /api/generate (deployed) or direct with a local key, like generate. */
+const CLASSIFY_CATS = CATS.filter(c => c.key !== 'hair').map(c => c.key);
+async function classifyGarment(dataUrl) {
+  if (!canGenerate()) return null;
+  const s = getSettings();
+  const prompt = `Look at this clothing product photo. Which ONE category best fits the main garment or accessory? Reply with EXACTLY one of these words, nothing else: ${CLASSIFY_CATS.join(', ')}. A complete outfit or set worn together => wholeset. If truly unclear => other.`;
+  const body = { contents: [{ parts: [{ text: prompt }, dataUrlToInlinePart(dataUrl)] }], generationConfig: { temperature: 0, maxOutputTokens: 10 } };
+  try {
+    const res = s.apiKey
+      ? await fetch(`${GEMINI_BASE}/models/${CLASSIFY_MODEL}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': s.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      : await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: CLASSIFY_MODEL, body }) });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const txt = (json.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').toLowerCase();
+    return CLASSIFY_CATS.find(k => new RegExp(`\\b${k}\\b`).test(txt)) || null;
+  } catch { return null; }
+}
+
+/* Pull one catalogued item's cover through the proxy, resize, classify it by image,
+   and store it as a real wardrobe item (the only point an image is downloaded). */
 async function materializeCatalog(id) {
   const c = state.catalog.find(x => x.id === id);
   if (!c) return;
@@ -736,8 +757,9 @@ async function materializeCatalog(id) {
     const res = await fetch('/api/import?img=' + encodeURIComponent(c.image));
     if (!res.ok) throw new Error('proxy ' + res.status);
     const { dataUrl } = await resizeFile(await res.blob(), ITEM_MAX_DIM);
+    const cat = (await classifyGarment(dataUrl)) || c.category || 'other';   // image beats the coded title
     const rec = {
-      id: uid(), cat: c.category || 'other', dataUrl, name: c.name || '',
+      id: uid(), cat, dataUrl, name: c.name || '',
       imageUrl: c.image,   // lets other devices re-load the picture on sync
       source: { name: c.name || '', price: null, currency: '', host: c.host || '', url: c.albumUrl },
       createdAt: Date.now(),
@@ -746,7 +768,7 @@ async function materializeCatalog(id) {
     state.items.push(rec);
     renderCats(); renderCatalog();
     scheduleSync();
-    toast(`Added “${c.name || 'item'}” to your wardrobe.`);
+    toast(`Added “${c.name || 'item'}” to ${catByKey(cat).label}.`);
   } catch (e) {
     console.warn('FitCheck materialize failed:', e);
     toast("Couldn't fetch that image — try again.", 'err');
