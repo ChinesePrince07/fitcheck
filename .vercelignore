@@ -3,5 +3,6 @@
 config.js
 
 # not needed at runtime
+test/
 docs/
 README.md

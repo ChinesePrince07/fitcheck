@@ -20,6 +20,7 @@ Upload a photo of yourself and photos of the clothes you're considering (screens
 
 - **Mix and match** — select several tops, bottoms, or shoes and it renders every combination as its own look, so you can compare them. It shows the number of looks and the rough cost before generating.
 - **Whole-set mode** — drop in one photo of a complete outfit (a flat lay, or a look you saw somewhere) and it dresses you in the whole thing, using only the clothing from that photo.
+- **Import from a link** — paste a product URL (Uniqlo, Zara, COS, Mango, or most shops) and FitCheck grabs the clothing image, name, and price automatically — no screenshot. Imported pieces keep a "↗ shop" link back to the product page.
 - **Hairstyle try-on** — choose a preset (buzz, Ivy League, slicked back, and so on) or upload a reference, and preview a new cut before booking the barber.
 - **Backdrops** — drop yourself into a studio, street, café, beach, runway, or park, or keep your own surroundings.
 - **Lookbook** — every result is saved so you can compare your options side by side.
