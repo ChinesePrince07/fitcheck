@@ -752,39 +752,47 @@ async function importStoreFromUrl(raw) {
   const drawer = answer.trim();
   const btn = $('#import-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Reading store…'; }
-  const found = [];
-  const seenAlbum = new Set(state.catalog.map(c => c.albumUrl));   // skip anything already catalogued
-  let host = '';
+  const seenAlbum = new Set(state.catalog.map(c => c.albumUrl));   // skip anything already catalogued (also lets a re-import resume)
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let host = '', added = 0, pageFailed = false;
+  state.catalogDrawer = drawer;                 // focus the drawer we're filling
   try {
     for (let page = 1; page <= 40; page++) {
       const u = new URL(raw); u.searchParams.set('page', String(page));
-      const res = await fetch('/api/import?store=' + encodeURIComponent(u.href));
-      const meta = await res.json().catch(() => ({ ok: false }));
-      if (!meta.ok || !meta.items?.length) break;
-      host = meta.store?.host || host;
-      let anyNew = false;
-      for (const it of meta.items) {
-        if (seenAlbum.has(it.albumUrl)) continue;
-        seenAlbum.add(it.albumUrl); anyNew = true;
-        found.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, createdAt: Date.now(), updatedAt: Date.now() });
+      // retry a page a few times — one flaky fetch must NOT abort the whole store
+      let meta = null;
+      for (let attempt = 0; attempt < 3 && !meta?.ok; attempt++) {
+        try { meta = await (await fetch('/api/import?store=' + encodeURIComponent(u.href))).json(); }
+        catch { meta = null; }
+        if (!meta?.ok) await sleep(700);
       }
-      if (!anyNew) break;                       // page repeated a prior one => past the end
-      if (btn) btn.textContent = `Reading store… ${found.length}`;
-      if (state.catalog.length + found.length >= 3000) break;   // safety cap
+      if (!meta?.ok) { pageFailed = true; break; }     // still failing after retries => stop (network down)
+      if (!meta.items?.length) break;                  // empty page => genuinely past the last page
+      host = meta.store?.host || host;
+      const fresh = [];
+      for (const it of meta.items) {
+        if (seenAlbum.has(it.albumUrl)) continue;      // dupes skipped, but we KEEP scanning later pages
+        seenAlbum.add(it.albumUrl);
+        fresh.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, createdAt: Date.now(), updatedAt: Date.now() });
+      }
+      for (const c of fresh) { try { await dbPut('catalog', c); } catch {} }   // persist per page: survives interruption, tiles appear progressively
+      state.catalog.push(...fresh);
+      added += fresh.length;
+      if (btn) btn.textContent = `Reading… ${added}`;
+      renderCatalog();
+      if (state.catalog.length >= 3000) break;         // safety cap
     }
-  } catch { /* keep whatever we gathered */ }
+  } catch (e) { console.warn('FitCheck store import:', e); }
   if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
-  if (!found.length) {
-    toast(state.catalog.length ? 'No new items — that store is already catalogued.' : "Couldn't read that store page.", state.catalog.length ? '' : 'err');
+  if (!added) {
+    toast(pageFailed ? 'Network hiccup reading the store — try Import again to resume.'
+      : (state.catalog.length ? 'No new items — that store is already catalogued.' : "Couldn't read that store page."),
+      pageFailed ? 'err' : (state.catalog.length ? '' : 'err'));
     return;
   }
-  for (const c of found) { try { await dbPut('catalog', c); } catch {} }
-  state.catalog.push(...found);
-  state.catalogDrawer = drawer;                 // focus the drawer we just filled
-  renderCatalog();
   scheduleSync();
   $('#catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast(`Catalogued ${found.length} item${found.length !== 1 ? 's' : ''} into “${drawer || 'Unsorted'}” — tap any to add.`);
+  toast(`Catalogued ${added} item${added !== 1 ? 's' : ''} into “${drawer || 'Unsorted'}”${pageFailed ? ' (stopped early — Import again to resume)' : ''} — tap any to add.`);
 }
 
 /* Ask the vision model which category a garment photo is — titles (Yupoo SKU codes)
