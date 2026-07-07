@@ -56,7 +56,7 @@ const MODEL_NAMES = {
 // Always use the best model + highest resolution available (no in-app selection).
 const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — strongest identity preservation for try-on
 const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and lighter on mobile (was 4K)
-const CLASSIFY_MODEL = 'gemini-flash-latest';   // cheap vision model to categorise a garment from its photo
+const CLASSIFY_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];   // cheap vision model to categorise a garment by photo; 2nd is fallback if the 1st is busy
 const DEFAULT_SETTINGS = {
   provider: 'gemini',
   apiKey: '',
@@ -734,15 +734,18 @@ async function classifyGarment(dataUrl) {
   const s = getSettings();
   const prompt = `Look at this clothing product photo. Which ONE category best fits the main garment or accessory? Reply with EXACTLY one of these words, nothing else: ${CLASSIFY_CATS.join(', ')}. A complete outfit or set worn together => wholeset. If truly unclear => other.`;
   const body = { contents: [{ parts: [{ text: prompt }, dataUrlToInlinePart(dataUrl)] }], generationConfig: { temperature: 0, maxOutputTokens: 10 } };
-  try {
-    const res = s.apiKey
-      ? await fetch(`${GEMINI_BASE}/models/${CLASSIFY_MODEL}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': s.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      : await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: CLASSIFY_MODEL, body }) });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const txt = (json.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').toLowerCase();
-    return CLASSIFY_CATS.find(k => new RegExp(`\\b${k}\\b`).test(txt)) || null;
-  } catch { return null; }
+  for (const model of CLASSIFY_MODELS) {
+    try {
+      const res = s.apiKey
+        ? await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': s.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        : await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, body }) });
+      if (!res.ok) continue;   // busy/unavailable (e.g. 503) => try the fallback model
+      const json = await res.json();
+      const txt = (json.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').toLowerCase();
+      return CLASSIFY_CATS.find(k => new RegExp(`\\b${k}\\b`).test(txt)) || null;
+    } catch { /* network error => try next model */ }
+  }
+  return null;
 }
 
 /* Pull one catalogued item's cover through the proxy, resize, classify it by image,
