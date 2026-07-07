@@ -80,6 +80,7 @@ const state = {
   abort: null,
   uploadCat: null,         // null => uploading a photo of you
   currentLookId: null,     // look open in viewer
+  importMeta: null,        // { pageUrl, source, images:[{url,kind}], cat, chosen:Set<idx> } while the import modal is open
 };
 
 function getSettings() {
@@ -405,6 +406,7 @@ function tileHtml(rec, { selected, kind }) {
     <img src="${rec.dataUrl}" alt="${esc(rec.name || kind)}" loading="lazy">
     <span class="check">✓</span>
     <button class="del" data-action="del-${kind}" data-id="${rec.id}" title="Delete">✕</button>
+    ${rec.source?.url ? `<a class="shop" href="${esc(rec.source.url)}" target="_blank" rel="noopener" title="View at ${esc(rec.source.host || 'shop')}">↗</a>` : ''}
     ${rec.name ? `<span class="name">${esc(rec.name)}</span>` : ''}
   </div>`;
 }
@@ -505,6 +507,7 @@ function renderAll() {
   renderLooks();
   renderOutfitBar();
   renderBanner();
+  const note = $('#import-note'); if (note) note.classList.toggle('hidden', proxyAvailable());
 }
 
 /* ============================== viewer / settings modals ============================== */
@@ -520,6 +523,9 @@ function openViewer(lookId) {
     (look.backdrop ? `<span class="chip">🖼️ ${esc(backdropById(look.backdrop)?.label || 'Setting')}</span>` : '') +
     (look.notes ? `<span class="chip">📝 ${esc(look.notes)}</span>` : '') +
     `<span class="when">${new Date(look.createdAt).toLocaleString()} · ${esc(MODEL_NAMES[look.model] || look.model)} · ${esc(look.size || '')}${look.ms ? ' · ' + Math.round(look.ms / 1000) + 's' : ''}</span>`;
+  const shops = look.items.map(li => state.items.find(x => x.id === li.id)).filter(x => x?.source?.url)
+    .map(x => `<a class="chip shop-chip" href="${esc(x.source.url)}" target="_blank" rel="noopener">↗ ${esc(x.source.host || 'shop')}</a>`).join('');
+  if (shops) $('#viewer-meta').innerHTML += shops;
   $('#viewer-modal').classList.add('open');
 }
 
@@ -564,6 +570,85 @@ async function handleFiles(files) {
   }
   if (ok) toast(cat === null ? `Added ${ok} photo${ok > 1 ? 's' : ''} of you` : `Added ${ok} item${ok > 1 ? 's' : ''}`);
   renderAll();
+}
+
+/* ============================== import from a shop URL ============================== */
+
+async function importFromUrl() {
+  if (!proxyAvailable()) { toast('Import runs on the hosted site (fitcheck.andypandy.org), not locally.', 'err'); return; }
+  const raw = ($('#import-url')?.value || '').trim();
+  if (!/^https?:\/\//i.test(raw)) { toast('Paste a full product link (starting with http).', 'err'); return; }
+  const btn = $('#import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+  try {
+    const res = await fetch('/api/import?url=' + encodeURIComponent(raw));
+    const meta = await res.json().catch(() => ({ ok: false }));
+    if (!meta.ok || !meta.images?.length) { toast("Couldn't read that link — try the image upload instead.", 'err'); return; }
+    state.importMeta = {
+      pageUrl: raw,
+      source: meta.source || {},
+      images: meta.images,
+      cat: meta.suggestedCategory || 'other',
+      chosen: new Set([0]),          // first (packshot) selected by default
+    };
+    renderImportModal();
+    $('#import-modal').classList.add('open');
+  } catch (e) {
+    console.warn('FitCheck import failed:', e);
+    toast('Import failed — check the link or try again.', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+  }
+}
+
+function renderImportModal() {
+  const m = state.importMeta;
+  if (!m) return;
+  const price = m.source.price != null ? `${m.source.currency ? m.source.currency + ' ' : ''}${m.source.price}` : '';
+  $('#import-title').textContent = m.source.name || 'Imported item';
+  $('#import-sub').textContent = [m.source.host, price].filter(Boolean).join('  ·  ');
+  $('#import-thumbs').innerHTML = m.images.map((img, i) =>
+    `<div class="tile selectable ${m.chosen.has(i) ? 'selected' : ''}" data-action="toggle-import-img" data-idx="${i}" role="button" tabindex="0">
+       <img src="${esc(img.url)}" alt="option ${i + 1}" loading="lazy" referrerpolicy="no-referrer">
+       <span class="check">✓</span>
+     </div>`).join('');
+  $('#import-cat').innerHTML = CATS.map(c =>
+    `<option value="${c.key}"${c.key === m.cat ? ' selected' : ''}>${c.icon} ${esc(c.label)}</option>`).join('');
+}
+
+async function addImported() {
+  const m = state.importMeta;
+  if (!m) return;
+  const idxs = [...m.chosen];
+  if (!idxs.length) { toast('Pick at least one image.', 'err'); return; }
+  const btn = $('#import-add-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  let ok = 0;
+  for (const i of idxs) {
+    const url = m.images[i]?.url;
+    if (!url) continue;
+    try {
+      const res = await fetch('/api/import?img=' + encodeURIComponent(url));
+      if (!res.ok) throw new Error('proxy ' + res.status);
+      const blob = await res.blob();
+      const { dataUrl } = await resizeFile(blob, ITEM_MAX_DIM);
+      const rec = {
+        id: uid(), cat: m.cat, dataUrl,
+        name: m.source.name || '',
+        source: { name: m.source.name || '', price: m.source.price ?? null, currency: m.source.currency || '', host: m.source.host || '', url: m.pageUrl },
+        createdAt: Date.now(),
+      };
+      await dbPut('items', rec);
+      state.items.push(rec);
+      ok++;
+    } catch (e) { console.warn('FitCheck import add failed:', e); }
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Add to wardrobe'; }
+  const host = m.source.host || 'the shop';
+  state.importMeta = null;
+  closeModals();
+  renderAll();
+  toast(ok ? `Added ${ok} item${ok > 1 ? 's' : ''} from ${host}.` : "Couldn't fetch that image — try again.", ok ? '' : 'err');
 }
 
 async function generate() {
@@ -672,6 +757,7 @@ async function testKey() {
 /* ============================== events ============================== */
 
 document.addEventListener('click', e => {
+  if (e.target.closest('a.shop')) return;   // let the shop link open its tab, don't select/deselect the tile
   const el = e.target.closest('[data-action]');
   if (!el) {
     if (e.target.classList && e.target.classList.contains('modal')) closeModals(); // click outside card
@@ -737,6 +823,14 @@ document.addEventListener('click', e => {
       });
       break;
     case 'generate': generate(); break;
+    case 'import-url': importFromUrl(); break;
+    case 'toggle-import-img': {
+      const i = +el.dataset.idx;
+      const ch = state.importMeta?.chosen;
+      if (ch) { ch.has(i) ? ch.delete(i) : ch.add(i); renderImportModal(); }
+      break;
+    }
+    case 'confirm-import': addImported(); break;
     case 'cancel-generate': state.abort?.abort(); break;
     case 'open-look': openViewer(id); break;
     case 'download-look': downloadLook(state.currentLookId); break;
@@ -775,8 +869,13 @@ document.addEventListener('input', e => {
   if (e.target.id === 'notes-input') state.notes = e.target.value;
 });
 
+document.addEventListener('change', e => {
+  if (e.target.id === 'import-cat' && state.importMeta) state.importMeta.cat = e.target.value;
+});
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModals();
+  if (e.key === 'Enter' && e.target.id === 'import-url') { e.preventDefault(); importFromUrl(); }
 });
 
 // mobile: after the tab is backgrounded and restored, re-render from in-memory state

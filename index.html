@@ -61,6 +61,11 @@
         <h2><span class="step">II</span> The Wardrobe</h2>
         <p class="hint">Add pieces, then select any number per category — every combination becomes its own look.</p>
       </header>
+      <div class="import-row">
+        <input id="import-url" type="url" placeholder="Paste a product link — Uniqlo, Zara, COS, Mango…" autocomplete="off" spellcheck="false">
+        <button class="btn" id="import-btn" data-action="import-url">Import</button>
+      </div>
+      <p class="hint import-note hidden" id="import-note">Import runs on the hosted site — open fitcheck.andypandy.org.</p>
       <div id="categories"></div>
     </section>
 
@@ -117,6 +122,20 @@
       <button class="btn" data-action="regen-look">↻ Regenerate</button>
       <span class="spacer"></span>
       <button class="btn danger" data-action="del-look">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import preview modal -->
+<div class="modal" id="import-modal">
+  <div class="modal-card">
+    <header><h3 id="import-title">Import</h3><button class="iconbtn" data-action="close-modal">✕</button></header>
+    <p class="import-sub" id="import-sub"></p>
+    <div class="grid import-thumbs" id="import-thumbs"></div>
+    <label class="field"><span>Add as</span><select id="import-cat"></select></label>
+    <div class="row">
+      <span class="spacer"></span>
+      <button class="btn primary" id="import-add-btn" data-action="confirm-import">Add to wardrobe</button>
     </div>
   </div>
 </div>
