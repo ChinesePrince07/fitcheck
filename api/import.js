@@ -122,6 +122,7 @@ const CAT_KEYWORDS = [
   ['necklace', /\b(necklace|pendant)s?\b/i],
   ['bracelet', /\b(bracelet|bangle|cuff)s?\b/i],
   ['tie',      /\b(necktie|bow ?tie)s?\b|\bties?\b(?![-\s]*dye)/i],   // "tie"/"ties" but not "tie-dye"
+  ['belt',     /\bbelts?\b/i],
   ['top',      /\b(shirt|tee|t-shirt|top|blouse|sweater|jumper|hoodie|polo|knit|sweatshirt|vest|turtleneck|tank|camisole)s?\b/i],
 ];
 export function guessCategory(text) {

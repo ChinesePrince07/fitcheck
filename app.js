@@ -10,6 +10,7 @@ const CATS = [
   { key: 'wholeset', label: 'Whole set',      icon: '🧍', verb: 'Dress the person in the COMPLETE outfit shown in this image — every garment, layer and accessory visible in it, reproduced exactly. If another person is shown wearing it, copy ONLY their clothing and accessories, never their face, body or identity' },
   { key: 'top',      label: 'Tops',           icon: '👕', verb: 'Completely remove the subject\'s original top and dress them in this exact garment instead — none of the old top (collar, sleeves, hem) may remain visible' },
   { key: 'bottom',   label: 'Bottoms',        icon: '👖', verb: 'Completely remove the subject\'s original bottoms and dress them in these exact bottoms instead — none of the old pair may remain visible' },
+  { key: 'belt',     label: 'Belts',          icon: '🪢', verb: 'Fasten this exact belt around their waist over their trousers or bottoms, threaded through the belt loops and buckled naturally at the front' },
   { key: 'outer',    label: 'Outerwear',      icon: '🧥', verb: 'Layer this exact jacket/outerwear naturally over their top' },
   { key: 'tie',      label: 'Ties',           icon: '👔', verb: 'Place this exact necktie on the subject, knotted neatly at the collar over their shirt and hanging naturally down the front' },
   { key: 'hat',      label: 'Hats & Beanies', icon: '🧢', verb: 'Place this exact hat/beanie naturally on their head' },
