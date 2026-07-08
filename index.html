@@ -8,8 +8,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script>try{var t=localStorage.getItem('fitcheck.theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="style.css">
-<meta name="theme-color" content="#1f3a2f">
+<meta name="theme-color" content="#f2ecdd" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14140f" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FitCheck">
@@ -26,7 +28,10 @@
       <p class="tagline">The considered wardrobe · est. MMXXVI</p>
     </div>
   </div>
-  <button class="iconbtn" data-action="open-settings" title="Settings" aria-label="Settings">⚙</button>
+  <div class="topbar-actions">
+    <button class="iconbtn" data-action="toggle-theme" id="theme-btn" title="Theme: auto / light / dark" aria-label="Toggle theme">◐</button>
+    <button class="iconbtn" data-action="open-settings" title="Settings" aria-label="Settings">⚙</button>
+  </div>
 </header>
 
 <div class="rule-band"><span class="rule-motif">✦</span></div>

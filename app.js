@@ -651,6 +651,20 @@ function openSettings() {
   $('#settings-modal').classList.add('open');
 }
 
+/* Theme: '' = follow system, 'light' / 'dark' = forced. Cycles auto → light → dark. */
+function applyTheme() {
+  const t = localStorage.getItem('fitcheck.theme') || '';
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const btn = $('#theme-btn');
+  if (btn) { btn.textContent = t === 'dark' ? '☾' : t === 'light' ? '☀' : '◐'; btn.title = `Theme: ${t || 'auto'} (tap to change)`; }
+}
+function cycleTheme() {
+  const cur = localStorage.getItem('fitcheck.theme') || '';
+  const next = cur === '' ? 'light' : cur === 'light' ? 'dark' : '';
+  if (next) localStorage.setItem('fitcheck.theme', next); else localStorage.removeItem('fitcheck.theme');
+  applyTheme();
+}
+
 function closeModals() {
   document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
   state.currentLookId = null;
@@ -1182,6 +1196,7 @@ document.addEventListener('click', e => {
       });
       break;
     }
+    case 'toggle-theme': cycleTheme(); break;
     case 'open-settings': openSettings(); break;
     case 'close-modal': closeModals(); break;
     case 'toggle-key-vis': {
@@ -1248,6 +1263,7 @@ $('#file-input').addEventListener('change', async e => {
     console.error('FitCheck: IndexedDB unavailable', e);
     toast('Storage unavailable — uploads won\'t persist. Are you in a private window?', 'err');
   }
+  applyTheme();
   renderAll();
   if (syncEnabled()) syncNow(true);   // pull the library (and flush local) on load
 })();
