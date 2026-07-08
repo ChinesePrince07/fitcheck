@@ -432,7 +432,7 @@ function renderCats() {
     const set = selSet(cat.key);
     return `<div class="cat" data-cat="${cat.key}">
       <div class="cat-head">
-        <h3>${cat.icon} ${cat.label}</h3>
+        <h3>${cat.label}</h3>
         <span class="count">${items.length ? items.length + ' item' + (items.length > 1 ? 's' : '') : ''}</span>
         ${set.size ? `<span class="picked">${set.size} selected</span>` : ''}
       </div>
@@ -593,12 +593,12 @@ function renderOutfitBar() {
     : `<span class="chip placeholder">nothing selected yet — pick items or a hairstyle</span>`;
   const raw = comboCount();
   const n = Math.min(raw, MAX_LOOKS_PER_RUN);
-  const label = n <= 1 ? '✨ Generate fit' : `✨ Generate ${n} looks · ~$${(n * COST_PER_LOOK).toFixed(2)}`;
+  const label = n <= 1 ? 'Generate fit' : `Generate ${n} looks · ~$${(n * COST_PER_LOOK).toFixed(2)}`;
   const capNote = raw > MAX_LOOKS_PER_RUN ? `<span class="cap-note">${raw} combinations — will render the first ${MAX_LOOKS_PER_RUN}</span>` : '';
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <span class="model-badge" title="Always generates on the best model available">✨ Nano Banana Pro · 1080p</span>
+    <span class="model-badge" title="Always generates on the best model available">Nano Banana Pro · 1080p</span>
     ${state.generating
       ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`

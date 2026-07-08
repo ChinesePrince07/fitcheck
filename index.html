@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FitCheck — the considered wardrobe</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2216%22 fill=%22%231f3a2f%22/><text x=%2250%22 y=%2274%22 font-size=%2270%22 text-anchor=%22middle%22 font-family=%22Georgia,serif%22 fill=%22%23c9a95e%22>F</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23e2360f%22/><text x=%2250%22 y=%2280%22 font-size=%2286%22 text-anchor=%22middle%22 font-family=%22Arial Black,Arial,sans-serif%22 font-weight=%22900%22 fill=%22%23f2f0ea%22>F</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>try{var t=localStorage.getItem('fitcheck.theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="style.css">
-<meta name="theme-color" content="#f2ecdd" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#14140f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#e9e7e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FitCheck">
@@ -25,7 +25,7 @@
     <span class="crest">F</span>
     <div class="wordmark">
       <h1>FitCheck</h1>
-      <p class="tagline">The considered wardrobe · est. MMXXVI</p>
+      <p class="tagline">Try it on first</p>
     </div>
   </div>
   <div class="topbar-actions">
@@ -45,7 +45,7 @@
   <aside class="rail">
     <section id="you-section" class="reveal">
       <header class="sec-head">
-        <h2><span class="step">I</span> The Subject</h2>
+        <h2><span class="step">01</span> You</h2>
         <p class="hint">A clear <strong>full-length, front-facing</strong> photo works best. Tap one to select it.</p>
       </header>
       <div class="grid" id="photos-grid"></div>
@@ -53,7 +53,7 @@
 
     <section id="lookbook-section" class="reveal">
       <header class="sec-head">
-        <h2><span class="step">V</span> The Lookbook</h2>
+        <h2><span class="step">05</span> Looks</h2>
         <p class="hint">Your generated looks, kept to compare before you commit.</p>
       </header>
       <div class="grid looks" id="looks-grid"></div>
@@ -63,8 +63,8 @@
   <div class="board">
     <section id="wardrobe-section" class="reveal">
       <header class="sec-head">
-        <h2><span class="step">II</span> The Wardrobe</h2>
-        <p class="hint">Add pieces, then select any number per category — every combination becomes its own look.</p>
+        <h2><span class="step">02</span> Wardrobe</h2>
+        <p class="hint">Add pieces, then select any number per category. Every combination becomes its own look.</p>
       </header>
       <div class="import-row">
         <input id="import-url" type="url" placeholder="Paste a product link, or a Yupoo store/category link…" autocomplete="off" spellcheck="false">
@@ -76,8 +76,8 @@
 
     <section id="catalog-section" class="reveal" hidden>
       <header class="sec-head">
-        <h2><span class="step">✦</span> The Catalogue</h2>
-        <p class="hint">Pieces browsed from a store — tap any one to pull it into your wardrobe, then try it on. Nothing downloads until you tap.</p>
+        <h2>Catalogue</h2>
+        <p class="hint">Pieces browsed from a store. Tap any one to pull it into your wardrobe, then try it on. Nothing downloads until you tap.</p>
       </header>
       <div class="hair-presets catalog-drawers" id="catalog-drawers"></div>
       <div class="catalog-bar">
@@ -94,7 +94,7 @@
 
     <section id="hair-section" class="reveal">
       <header class="sec-head">
-        <h2><span class="step">III</span> The Coiffure</h2>
+        <h2><span class="step">03</span> Hair</h2>
         <p class="hint">Pick a preset or upload a cut. Leave it to keep your own hair.</p>
       </header>
       <div class="hair-presets" id="hair-presets"></div>
@@ -103,7 +103,7 @@
 
     <section id="scene-section" class="reveal">
       <header class="sec-head">
-        <h2><span class="step">IV</span> The Setting</h2>
+        <h2><span class="step">04</span> Setting</h2>
         <p class="hint">Change the backdrop, or leave it to keep where you are.</p>
       </header>
       <div class="hair-presets" id="scene-chips"></div>
