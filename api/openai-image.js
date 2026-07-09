@@ -28,9 +28,21 @@ async function readJson(req) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') { res.status(405).json({ error: { message: 'POST only' } }); return; }
   const key = process.env.OPENAI_API_KEY;
   if (!key) { res.status(500).json({ error: { message: 'Server is missing OPENAI_API_KEY — set it in the Vercel project env.' } }); return; }
+
+  // GET ?models — list the router's models (debug). Gated by the sync secret.
+  if (req.method === 'GET' && 'models' in (req.query || {})) {
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!process.env.SYNC_SECRET || bearer !== process.env.SYNC_SECRET) { res.status(401).json({ error: { message: 'unauthorized' } }); return; }
+    try {
+      const r = await fetch(`${BASE}/models`, { headers: { Authorization: `Bearer ${key}` } });
+      res.status(r.status).json(await r.json());
+    } catch (e) { res.status(502).json({ error: { message: e?.message || 'router unreachable' } }); }
+    return;
+  }
+
+  if (req.method !== 'POST') { res.status(405).json({ error: { message: 'POST only' } }); return; }
 
   const { model, prompt, images, size, quality } = await readJson(req);
   if (!prompt || !Array.isArray(images) || !images.length) {
