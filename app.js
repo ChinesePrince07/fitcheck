@@ -54,10 +54,13 @@ const backdropById = id => BACKDROPS.find(b => b.id === id);
 const MODEL_NAMES = {
   'gemini-3.1-flash-image': 'Nano Banana 2',
   'gemini-3-pro-image': 'Nano Banana Pro',
+  'gpt-image-2': 'GPT Image 2',
 };
 // Always use the best model + highest resolution available (no in-app selection).
-const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — strongest identity preservation for try-on
+const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — the fallback engine
 const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and lighter on mobile (was 4K)
+const GPT_MODEL = 'gpt-image-2';           // primary engine, via the router proxy (/api/openai-image)
+const GPT_QUALITY = 'medium';
 const CLASSIFY_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];   // cheap vision model to categorise a garment by photo; 2nd is fallback if the 1st is busy
 /* Settings are deliberately minimal ("for the masses"): only the sync secret is
    user-facing. Engine, model and keys are fixed server-side — generation always
@@ -125,7 +128,7 @@ function openaiSize(person) {
 /* ============================== selection (mix & match) ============================== */
 
 const MAX_LOOKS_PER_RUN = 20;   // safety cap on a single mix-and-match batch
-const COST_PER_LOOK = 0.14;     // Nano Banana Pro @ ~1080p
+const COST_PER_LOOK = 0.08;     // GPT Image 2 @ medium (approx, incl. input photos)
 
 const selSet = cat => state.sel.get(cat) || new Set();
 function toggleSel(cat, id) {
@@ -629,7 +632,7 @@ function renderOutfitBar() {
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <span class="model-badge" title="Image engine">Nano Banana Pro · 1080p</span>
+    <span class="model-badge" title="Image engine">GPT Image 2 · medium</span>
     ${state.generating
       ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
@@ -1023,17 +1026,24 @@ async function generate() {
     const combo = combos[idx];
     const t0 = Date.now();
     try {
-      // Always the fixed default: Nano Banana Pro through the hosted proxy. The
-      // openai engine (PROVIDERS.openai + /api/openai-image) stays dormant until
-      // an image-capable router key exists — flip here when it does.
-      const out = await PROVIDERS.gemini.generate({
-        apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
-        person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
-      });
+      // Fixed default: GPT Image 2 (medium) through the hosted router proxy.
+      // If the router errors (down / quota / slow), fall back to Nano Banana Pro
+      // so a user never ends up with nothing. User-cancels are not retried.
+      const gargs = { person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal };
+      let out, usedModel, usedSize;
+      try {
+        out = await PROVIDERS.openai.generate({ model: GPT_MODEL, quality: GPT_QUALITY, size: openaiSize(person), ...gargs });
+        usedModel = GPT_MODEL; usedSize = `${openaiSize(person)} · ${GPT_QUALITY}`;
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        console.warn('FitCheck: GPT Image failed, falling back to Nano Banana —', e);
+        out = await PROVIDERS.gemini.generate({ apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE, ...gargs });
+        usedModel = BEST_MODEL; usedSize = BEST_IMAGE_SIZE;
+      }
       const look = {
         id: uid(), dataUrl: out.dataUrl,
         items: combo.items.map(i => ({ id: i.id, cat: i.cat })),
-        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
+        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: usedModel, size: usedSize,
         ms: Date.now() - t0, createdAt: Date.now(),
       };
       await dbPut('looks', look);
