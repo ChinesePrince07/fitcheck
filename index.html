@@ -133,7 +133,14 @@
     </label>
     <label class="field" id="openai-model-field">
       <span>GPT model — your router's name for it</span>
-      <input type="text" id="set-openai-model" placeholder="gpt-image-1.5" autocomplete="off" spellcheck="false">
+      <span class="keyrow">
+        <input type="text" id="set-openai-model" placeholder="gpt-image-2" autocomplete="off" spellcheck="false">
+        <select id="set-openai-quality" title="Quality">
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </span>
     </label>
     <p class="field note">GPT Image runs through your OpenAI-compatible router. The router key lives <strong>server-side</strong> — set <strong>OPENAI_API_KEY</strong> (and <strong>OPENAI_BASE_URL</strong>) in the Vercel env, then it works on the hosted site.</p>
     <label class="field">

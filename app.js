@@ -64,7 +64,8 @@ const DEFAULT_SETTINGS = {
   apiKey: '',
   syncSecret: '',
   engine: 'gemini',              // 'gemini' (Nano Banana) or 'openai' (GPT Image via router)
-  openaiModel: 'gpt-image-1.5',  // your router's name for the GPT image model
+  openaiModel: 'gpt-image-2',    // your router's name for the GPT image model
+  openaiQuality: 'medium',       // low | medium | high
 };
 
 const PERSON_MAX_DIM = 2048;   // keep the face at high resolution to help identity preservation
@@ -425,12 +426,12 @@ const PROVIDERS = {
      The router key lives server-side; requests go through /api/openai-image. */
   openai: {
     label: 'GPT Image (router)',
-    async generate({ model, person, items, notes, hairPreset, backdrop, size, signal }) {
+    async generate({ model, quality, person, items, notes, hairPreset, backdrop, size, signal }) {
       const prompt = buildPrompt(items, notes, hairPreset, backdrop);
       const images = [person.dataUrl, ...items.map(it => it.dataUrl)];   // subject first, then each garment
       const res = await fetch('/api/openai-image', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, images, size }), signal,
+        body: JSON.stringify({ model, quality, prompt, images, size }), signal,
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error?.message || `Image router error ${res.status}`);
@@ -628,7 +629,7 @@ function renderOutfitBar() {
   const label = n <= 1 ? 'Generate fit' : `Generate ${n} looks · ~$${(n * COST_PER_LOOK).toFixed(2)}`;
   const capNote = raw > MAX_LOOKS_PER_RUN ? `<span class="cap-note">${raw} combinations — will render the first ${MAX_LOOKS_PER_RUN}</span>` : '';
   const eng = getSettings();
-  const badge = eng.engine === 'openai' ? `GPT Image · ${esc(eng.openaiModel || 'gpt-image-1.5')}` : 'Nano Banana Pro · 1080p';
+  const badge = eng.engine === 'openai' ? `${esc(eng.openaiModel || 'gpt-image-2')} · ${esc(eng.openaiQuality || 'medium')}` : 'Nano Banana Pro · 1080p';
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
@@ -682,7 +683,8 @@ function openSettings() {
   $('#test-key-result').className = 'test-result';
   const sync = $('#sync-secret'); if (sync) sync.value = s.syncSecret || '';
   const eng = $('#set-engine'); if (eng) eng.value = s.engine || 'gemini';
-  const om = $('#set-openai-model'); if (om) om.value = s.openaiModel || 'gpt-image-1.5';
+  const om = $('#set-openai-model'); if (om) om.value = s.openaiModel || 'gpt-image-2';
+  const oq = $('#set-openai-quality'); if (oq) oq.value = s.openaiQuality || 'medium';
   setSyncStatus(syncEnabled() ? 'Sync on' : (proxyAvailable() ? 'Sync off — add a secret' : 'Sync runs on the hosted site'));
   $('#settings-modal').classList.add('open');
 }
@@ -1042,7 +1044,7 @@ async function generate() {
       const genSize = useOpenai ? openaiSize(person) : BEST_IMAGE_SIZE;
       const out = useOpenai
         ? await PROVIDERS.openai.generate({
-            model: genModel, size: genSize,
+            model: genModel, quality: s.openaiQuality || 'medium', size: genSize,
             person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
           })
         : await PROVIDERS.gemini.generate({
@@ -1260,7 +1262,8 @@ document.addEventListener('click', e => {
       s.apiKey = $('#set-key').value.trim();
       s.syncSecret = ($('#sync-secret')?.value || '').trim();
       s.engine = ($('#set-engine')?.value === 'openai') ? 'openai' : 'gemini';
-      s.openaiModel = ($('#set-openai-model')?.value || '').trim() || 'gpt-image-1.5';
+      s.openaiModel = ($('#set-openai-model')?.value || '').trim() || 'gpt-image-2';
+      s.openaiQuality = $('#set-openai-quality')?.value || 'medium';
       saveSettings(s);
       closeModals();
       renderOutfitBar(); renderBanner();

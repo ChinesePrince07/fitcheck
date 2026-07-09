@@ -32,16 +32,17 @@ export default async function handler(req, res) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) { res.status(500).json({ error: { message: 'Server is missing OPENAI_API_KEY — set it in the Vercel project env.' } }); return; }
 
-  const { model, prompt, images, size } = await readJson(req);
+  const { model, prompt, images, size, quality } = await readJson(req);
   if (!prompt || !Array.isArray(images) || !images.length) {
     res.status(400).json({ error: { message: 'Missing prompt or images.' } }); return;
   }
 
   const form = new FormData();
-  form.append('model', model || 'gpt-image-1.5');
+  form.append('model', model || 'gpt-image-2');
   form.append('prompt', String(prompt));
   form.append('input_fidelity', 'high');   // keep the subject's face/identity
   form.append('n', '1');
+  if (quality) form.append('quality', String(quality));   // low | medium | high
   if (size) form.append('size', String(size));
   images.forEach((d, i) => form.append('image[]', dataUrlToBlob(d), `image-${i}.png`));
 
