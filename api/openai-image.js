@@ -42,8 +42,10 @@ export default async function handler(req, res) {
         try { await fetch(`${h}/models`, { headers: { Authorization: `Bearer ${key}` } }); samples.push(Date.now() - t); }
         catch { samples.push(-1); }
       }
+      let status = 0;
+      try { const r = await fetch(`${h}/models`, { headers: { Authorization: `Bearer ${key}` } }); status = r.status; } catch { status = -1; }
       const ok = samples.filter(x => x >= 0).sort((a, b) => a - b);
-      out[h] = { samples, median_ms: ok.length ? ok[Math.floor(ok.length / 2)] : null };
+      out[h] = { status, median_ms: ok.length ? ok[Math.floor(ok.length / 2)] : null };
     }
     res.status(200).json(out); return;
   }
