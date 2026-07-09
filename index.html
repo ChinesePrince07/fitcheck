@@ -81,11 +81,17 @@
       <div class="hair-presets catalog-drawers" id="catalog-drawers"></div>
       <div class="catalog-bar">
         <input id="catalog-filter" type="search" placeholder="Filter by name…" autocomplete="off" spellcheck="false">
+        <select id="catalog-sort" class="btn small" title="Sort items" aria-label="Sort items">
+          <option value="added">Drawer order</option>
+          <option value="updated">Recently updated</option>
+          <option value="name">Name A–Z</option>
+        </select>
         <span class="count" id="catalog-count"></span>
         <button class="btn small" id="drawer-left-btn" data-action="move-drawer-left" title="Move drawer earlier" hidden>◀</button>
         <button class="btn small" id="drawer-right-btn" data-action="move-drawer-right" title="Move drawer later" hidden>▶</button>
         <button class="btn small" id="drawer-rename-btn" data-action="rename-drawer" hidden>Rename</button>
         <button class="btn small danger" id="drawer-delete-btn" data-action="delete-drawer" hidden>Delete drawer</button>
+        <button class="btn small" id="catalog-refresh-btn" data-action="refresh-catalog" title="Re-check every store for newly added items">Refresh</button>
         <button class="btn small" data-action="clear-catalog">Clear all</button>
       </div>
       <div class="grid" id="catalog-grid"></div>

@@ -96,6 +96,7 @@ const state = {
   importMeta: null,        // { pageUrl, source, images:[{url,kind}], cat, chosen:Set<idx> } while the import modal is open
   catalog: [],             // lightweight store entries { id, name, image, albumUrl, category, drawer, host, createdAt } — no image data
   catalogFilter: '',       // name filter for the Catalogue grid
+  catalogSort: localStorage.getItem('fitcheck.catalogSort') || 'added',   // 'added' (drawer order) | 'updated' | 'name'
   catalogDrawer: null,     // selected drawer tab: null = All; '' = Unsorted; a name = that drawer
   drawerOrder: [],         // user's preferred drawer order (names); unlisted drawers fall in after, by age
   pendingDeleted: new Set(),   // ids deleted locally since last sync (tombstones to push)
@@ -336,7 +337,7 @@ Change ONLY the following, nothing else:
 
 ${changes.join('\n')}
 
-Where a garment is replaced, FULLY REMOVE the subject's original piece first — none of the original clothing being replaced may remain visible, peek out at the collar, cuffs, sleeves, hem or waist, or show through underneath the new item. Each new garment or accessory must keep its exact design, colour, pattern, texture and material from its reference image. Anything not listed above stays exactly as in Image 1. Blend every change in photorealistically — natural fit, draping, wrinkles, contact shadows and lighting consistent with Image 1. Output only the final edited photograph of the subject.`;
+Where a garment is replaced, FULLY REMOVE the subject's original piece first — none of the original clothing being replaced may remain visible, peek out at the collar, cuffs, sleeves, hem or waist, or show through underneath the new item. Each new garment or accessory must keep its exact design, colour, pattern, texture and material from its reference image. The references are store product shots — remove any hang tags, price tags, size stickers, brand labels or plastic clips attached to a garment so each piece looks worn, not for sale. Anything not listed above stays exactly as in Image 1. Blend every change in photorealistically — natural fit, draping, wrinkles, contact shadows and lighting consistent with Image 1. Output only the final edited photograph of the subject.`;
   if (notes && notes.trim()) p += `\n\nStyling notes: ${notes.trim()}`;
   return p;
 }
@@ -573,6 +574,7 @@ function renderCatalog() {
   if (!sec) return;
   if (!state.catalog.length) { sec.hidden = true; return; }
   sec.hidden = false;
+  const sortSel = $('#catalog-sort'); if (sortSel && sortSel.value !== state.catalogSort) sortSel.value = state.catalogSort;
   renderDrawers();
   const isDrawer = state.catalogDrawer !== null;   // drawer actions apply to a specific drawer, not "All"
   const order = currentDrawers(), di = order.indexOf(state.catalogDrawer);
@@ -586,6 +588,15 @@ function renderCatalog() {
   const list = state.catalog.filter(c =>
     (state.catalogDrawer === null || drawerOf(c) === state.catalogDrawer) &&
     (!f || (c.name || '').toLowerCase().includes(f)));
+  if (state.catalogSort === 'name')          // numeric:true sorts SKU codes (P450 < P690) naturally; blank names sink
+    list.sort((a, b) => {
+      const an = a.name || '', bn = b.name || '';
+      if (!an !== !bn) return an ? -1 : 1;   // a named item always beats a blank one (locale collation would float blanks up)
+      return an.localeCompare(bn, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  else if (state.catalogSort === 'updated')  // newest touch first — freshly-refreshed & renamed items float up
+    list.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+  // 'added' => leave in catalogue (import) order
   const added = new Set(state.items.filter(i => i.source?.url).map(i => i.source.url));
   const count = $('#catalog-count');
   const scope = state.catalogDrawer === null ? state.catalog.length : state.catalog.filter(c => drawerOf(c) === state.catalogDrawer).length;
@@ -850,7 +861,7 @@ async function importStoreFromUrl(raw) {
       for (const it of meta.items) {
         if (seenAlbum.has(it.albumUrl)) continue;      // dupes skipped, but we KEEP scanning later pages
         seenAlbum.add(it.albumUrl);
-        fresh.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, createdAt: Date.now(), updatedAt: Date.now() });
+        fresh.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, storeUrl: raw, createdAt: Date.now(), updatedAt: Date.now() });
       }
       for (const c of fresh) { try { await dbPut('catalog', c); } catch {} }   // persist per page: survives interruption, tiles appear progressively
       state.catalog.push(...fresh);
@@ -870,6 +881,79 @@ async function importStoreFromUrl(raw) {
   scheduleSync();
   $('#catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   toast(`Catalogued ${added} item${added !== 1 ? 's' : ''} into “${drawer || 'Unsorted'}”${pageFailed ? ' (stopped early — Import again to resume)' : ''} — tap any to add.`);
+}
+
+/* The Yupoo category URL(s) a drawer came from. Entries imported after this
+   feature carry storeUrl; older ones are rebuilt from the album URL's
+   referrercate/isSubCate params — belts are sub-categories, so they need
+   isSubCate=true or Yupoo answers {reason:"blocked"}. */
+function drawerSources(drawer) {
+  const urls = new Set();
+  for (const c of state.catalog) {
+    if (drawerOf(c) !== drawer) continue;
+    if (c.storeUrl) { urls.add(c.storeUrl); continue; }
+    try {
+      const u = new URL(c.albumUrl);
+      const cate = u.searchParams.get('referrercate');
+      if (!cate) continue;
+      urls.add(`${u.origin}/categories/${cate}?uid=${u.searchParams.get('uid') || '1'}&isSubCate=${u.searchParams.get('isSubCate') || 'false'}`);
+    } catch { /* an entry without a parseable album URL just can't be refreshed */ }
+  }
+  return [...urls];
+}
+
+/* Yupoo stores restock constantly. Refresh re-reads every drawer's source
+   category and appends album covers we don't have yet. New albums land at the
+   FRONT (newest-first), so a source stops once a whole page is already known —
+   usually one request per drawer.
+   ponytail: assumes new-at-front ordering; a mass re-bump could hide new items
+   behind an all-seen page. Re-import that store if a drawer ever looks stale. */
+async function refreshCatalog() {
+  if (!state.catalog.length) { toast('Nothing to refresh yet.'); return; }
+  const btn = $('#catalog-refresh-btn');
+  if (btn) btn.disabled = true;
+  const seenAlbum = new Set(state.catalog.map(c => c.albumUrl));
+  const drawers = [...new Set(state.catalog.map(drawerOf))];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let added = 0, failed = false;
+  try {
+    for (const drawer of drawers) {
+      for (const src of drawerSources(drawer)) {
+        for (let page = 1; page <= 40; page++) {
+          const u = new URL(src); u.searchParams.set('page', String(page));
+          let meta = null;
+          for (let attempt = 0; attempt < 3 && !meta?.ok; attempt++) {
+            try { meta = await (await fetch('/api/import?store=' + encodeURIComponent(u.href))).json(); }
+            catch { meta = null; }
+            if (!meta?.ok) await sleep(700);
+          }
+          if (!meta?.ok) { failed = true; break; }        // flaky source after retries => leave it, try next
+          if (!meta.items?.length) break;                 // past the last page
+          const host = meta.store?.host || '';
+          const fresh = [];
+          for (const it of meta.items) {
+            if (seenAlbum.has(it.albumUrl)) continue;
+            seenAlbum.add(it.albumUrl);
+            fresh.push({ id: uid(), name: it.name || '', image: it.image, albumUrl: it.albumUrl, category: it.category || 'other', drawer, host, storeUrl: src, createdAt: Date.now(), updatedAt: Date.now() });
+          }
+          if (!fresh.length) break;                        // whole page already known => nothing newer behind it
+          for (const c of fresh) { try { await dbPut('catalog', c); } catch {} }
+          state.catalog.push(...fresh);
+          added += fresh.length;
+          if (btn) btn.textContent = `Refreshing… +${added}`;
+          renderCatalog();
+          if (state.catalog.length >= 6000) break;         // safety cap
+        }
+      }
+    }
+  } catch (e) { console.warn('FitCheck refresh:', e); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+  renderDrawers();
+  if (added) scheduleSync();
+  toast(added
+    ? `Added ${added} new item${added !== 1 ? 's' : ''} across your drawers.${failed ? ' (a store was flaky — Refresh again.)' : ''}`
+    : (failed ? 'A store was flaky — try Refresh again.' : 'Everything is already up to date.'),
+    failed && !added ? 'err' : '');
 }
 
 /* Ask the vision model which category a garment photo is — titles (Yupoo SKU codes)
@@ -1216,6 +1300,7 @@ document.addEventListener('click', e => {
         })();
       }
       break;
+    case 'refresh-catalog': refreshCatalog(); break;
     case 'import-url': importFromUrl(); break;
     case 'toggle-import-img': {
       const i = +el.dataset.idx;
@@ -1262,6 +1347,11 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   if (e.target.id === 'import-cat' && state.importMeta) state.importMeta.cat = e.target.value;
+  if (e.target.id === 'catalog-sort') {
+    state.catalogSort = e.target.value;
+    try { localStorage.setItem('fitcheck.catalogSort', state.catalogSort); } catch {}
+    renderCatalog();
+  }
 });
 
 document.addEventListener('keydown', e => {
