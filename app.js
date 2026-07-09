@@ -60,7 +60,7 @@ const MODEL_NAMES = {
 const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — the fallback engine
 const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and lighter on mobile (was 4K)
 const GPT_MODEL = 'gpt-image-2';           // primary engine, via the router proxy (/api/openai-image)
-const GPT_QUALITY = 'medium';
+const GPT_QUALITY = 'low';                 // faster + cheaper than medium; still solid for try-on fits
 const CLASSIFY_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];   // cheap vision model to categorise a garment by photo; 2nd is fallback if the 1st is busy
 /* Settings are deliberately minimal ("for the masses"): only the sync secret is
    user-facing. Engine, model and keys are fixed server-side — generation always
@@ -128,7 +128,7 @@ function openaiSize(person) {
 /* ============================== selection (mix & match) ============================== */
 
 const MAX_LOOKS_PER_RUN = 20;   // safety cap on a single mix-and-match batch
-const COST_PER_LOOK = 0.08;     // GPT Image 2 @ medium (approx, incl. input photos)
+const COST_PER_LOOK = 0.03;     // GPT Image 2 @ low (approx, incl. input photos)
 
 const selSet = cat => state.sel.get(cat) || new Set();
 function toggleSel(cat, id) {
@@ -632,7 +632,7 @@ function renderOutfitBar() {
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <span class="model-badge" title="Image engine">GPT Image 2 · medium</span>
+    <span class="model-badge" title="Image engine">GPT Image 2 · low</span>
     ${state.generating
       ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
