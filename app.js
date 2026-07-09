@@ -63,6 +63,8 @@ const DEFAULT_SETTINGS = {
   provider: 'gemini',
   apiKey: '',
   syncSecret: '',
+  engine: 'gemini',              // 'gemini' (Nano Banana) or 'openai' (GPT Image via router)
+  openaiModel: 'gpt-image-1.5',  // your router's name for the GPT image model
 };
 
 const PERSON_MAX_DIM = 2048;   // keep the face at high resolution to help identity preservation
@@ -108,7 +110,18 @@ function saveSettings(s) {
 function proxyAvailable() {
   return location.protocol.startsWith('http') && !/^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
 }
-function canGenerate() { return !!getSettings().apiKey || proxyAvailable(); }
+function canGenerate() {
+  const s = getSettings();
+  if (s.engine === 'openai') return proxyAvailable();   // router key is server-side only
+  return !!s.apiKey || proxyAvailable();
+}
+/* GPT Image sizes are fixed buckets — pick the one matching the subject's aspect. */
+function openaiSize(person) {
+  const r = (person.w || 1) / (person.h || 1);
+  if (r >= 1.15) return '1536x1024';
+  if (r <= 0.87) return '1024x1536';
+  return '1024x1024';
+}
 
 /* ============================== selection (mix & match) ============================== */
 
@@ -406,6 +419,25 @@ const PROVIDERS = {
       throw geminiHttpError(res.status, json);
     },
   },
+
+  /* GPT Image through a custom OpenAI-compatible router. Try-on = an image edit:
+     the subject photo + garment photos are sent as input images + the prompt.
+     The router key lives server-side; requests go through /api/openai-image. */
+  openai: {
+    label: 'GPT Image (router)',
+    async generate({ model, person, items, notes, hairPreset, backdrop, size, signal }) {
+      const prompt = buildPrompt(items, notes, hairPreset, backdrop);
+      const images = [person.dataUrl, ...items.map(it => it.dataUrl)];   // subject first, then each garment
+      const res = await fetch('/api/openai-image', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt, images, size }), signal,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error?.message || `Image router error ${res.status}`);
+      if (!json.dataUrl) throw new Error('The router returned no image — try again.');
+      return { dataUrl: json.dataUrl };
+    },
+  },
 };
 
 /* ============================== rendering ============================== */
@@ -595,10 +627,12 @@ function renderOutfitBar() {
   const n = Math.min(raw, MAX_LOOKS_PER_RUN);
   const label = n <= 1 ? 'Generate fit' : `Generate ${n} looks · ~$${(n * COST_PER_LOOK).toFixed(2)}`;
   const capNote = raw > MAX_LOOKS_PER_RUN ? `<span class="cap-note">${raw} combinations — will render the first ${MAX_LOOKS_PER_RUN}</span>` : '';
+  const eng = getSettings();
+  const badge = eng.engine === 'openai' ? `GPT Image · ${esc(eng.openaiModel || 'gpt-image-1.5')}` : 'Nano Banana Pro · 1080p';
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <span class="model-badge" title="Always generates on the best model available">Nano Banana Pro · 1080p</span>
+    <span class="model-badge" title="Image engine">${badge}</span>
     ${state.generating
       ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
@@ -647,6 +681,8 @@ function openSettings() {
   $('#test-key-result').textContent = '';
   $('#test-key-result').className = 'test-result';
   const sync = $('#sync-secret'); if (sync) sync.value = s.syncSecret || '';
+  const eng = $('#set-engine'); if (eng) eng.value = s.engine || 'gemini';
+  const om = $('#set-openai-model'); if (om) om.value = s.openaiModel || 'gpt-image-1.5';
   setSyncStatus(syncEnabled() ? 'Sync on' : (proxyAvailable() ? 'Sync off — add a secret' : 'Sync runs on the hosted site'));
   $('#settings-modal').classList.add('open');
 }
@@ -975,7 +1011,13 @@ async function applyMergedLibrary(lib) {
 async function generate() {
   if (state.generating) return;
   const s = getSettings();
-  if (!canGenerate()) { openSettings(); toast('Add your Gemini API key first (billing enabled — image models have no free tier).', 'err'); return; }
+  if (!canGenerate()) {
+    openSettings();
+    toast(getSettings().engine === 'openai'
+      ? 'GPT Image runs through your router on the hosted site — set OPENAI_API_KEY server-side, then use fitcheck.andypandy.org.'
+      : 'Add your Gemini API key first (billing enabled — image models have no free tier).', 'err');
+    return;
+  }
   const person = state.photos.find(p => p.id === state.activePhotoId);
   if (!person) { toast('Add a photo of yourself first (section 1).', 'err'); return; }
   if (!anySelection()) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
@@ -995,14 +1037,22 @@ async function generate() {
     const combo = combos[idx];
     const t0 = Date.now();
     try {
-      const out = await PROVIDERS[s.provider].generate({
-        apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
-        person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
-      });
+      const useOpenai = s.engine === 'openai';
+      const genModel = useOpenai ? (s.openaiModel || 'gpt-image-1.5') : BEST_MODEL;
+      const genSize = useOpenai ? openaiSize(person) : BEST_IMAGE_SIZE;
+      const out = useOpenai
+        ? await PROVIDERS.openai.generate({
+            model: genModel, size: genSize,
+            person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
+          })
+        : await PROVIDERS.gemini.generate({
+            apiKey: s.apiKey, model: genModel, imageSize: genSize,
+            person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
+          });
       const look = {
         id: uid(), dataUrl: out.dataUrl,
         items: combo.items.map(i => ({ id: i.id, cat: i.cat })),
-        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
+        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: genModel, size: genSize,
         ms: Date.now() - t0, createdAt: Date.now(),
       };
       await dbPut('looks', look);
@@ -1209,6 +1259,8 @@ document.addEventListener('click', e => {
       const s = getSettings();
       s.apiKey = $('#set-key').value.trim();
       s.syncSecret = ($('#sync-secret')?.value || '').trim();
+      s.engine = ($('#set-engine')?.value === 'openai') ? 'openai' : 'gemini';
+      s.openaiModel = ($('#set-openai-model')?.value || '').trim() || 'gpt-image-1.5';
       saveSettings(s);
       closeModals();
       renderOutfitBar(); renderBanner();

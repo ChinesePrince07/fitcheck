@@ -124,7 +124,18 @@
         <button class="iconbtn" data-action="toggle-key-vis" title="Show/hide">👁</button>
       </span>
     </label>
-    <p class="field note">Every fit is rendered on <strong>Nano Banana Pro · 1080p</strong> (≈$0.14 apiece, ~20–40s). No settings to trouble yourself with.</p>
+    <label class="field">
+      <span>Image engine</span>
+      <select id="set-engine">
+        <option value="gemini">Nano Banana Pro — Gemini (≈$0.14 · 1080p)</option>
+        <option value="openai">GPT Image — via your router</option>
+      </select>
+    </label>
+    <label class="field" id="openai-model-field">
+      <span>GPT model — your router's name for it</span>
+      <input type="text" id="set-openai-model" placeholder="gpt-image-1.5" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="field note">GPT Image runs through your OpenAI-compatible router. The router key lives <strong>server-side</strong> — set <strong>OPENAI_API_KEY</strong> (and <strong>OPENAI_BASE_URL</strong>) in the Vercel env, then it works on the hosted site.</p>
     <label class="field">
       <span>Sync secret — same passphrase on every device shares your catalogue &amp; wardrobe (needs the hosted site)</span>
       <span class="keyrow">
