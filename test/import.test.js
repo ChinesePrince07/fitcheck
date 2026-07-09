@@ -89,6 +89,8 @@ test('guessCategory maps keywords to FitCheck categories', () => {
   assert.equal(guessCategory('Navy Necktie'), 'tie');
   assert.equal(guessCategory('Tie-Dye Hoodie'), 'top');   // not a tie
   assert.equal(guessCategory('Leather Belt'), 'belt');
+  assert.equal(guessCategory('Aviator Sunglasses'), 'glasses');
+  assert.equal(guessCategory('Round Metal Eyewear'), 'glasses');
   assert.equal(guessCategory('Scented Candle'), 'other');
 });
 

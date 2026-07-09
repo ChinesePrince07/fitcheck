@@ -14,6 +14,7 @@ const CATS = [
   { key: 'outer',    label: 'Outerwear',      icon: '🧥', verb: 'Layer this exact jacket/outerwear naturally over their top' },
   { key: 'tie',      label: 'Ties',           icon: '👔', verb: 'Place this exact necktie on the subject, knotted neatly at the collar over their shirt and hanging naturally down the front' },
   { key: 'hat',      label: 'Hats & Beanies', icon: '🧢', verb: 'Place this exact hat/beanie naturally on their head' },
+  { key: 'glasses',  label: 'Glasses',        icon: '👓', verb: 'Place these exact glasses on the subject\'s face, resting naturally on the nose and ears, while keeping their eyes, face and identity unchanged' },
   { key: 'shoes',    label: 'Shoes',          icon: '👟', verb: 'Remove the subject\'s original footwear entirely and put them in this exact pair instead' },
   { key: 'necklace', label: 'Necklaces',      icon: '📿', verb: 'Add this exact necklace around their neck, resting naturally' },
   { key: 'watch',    label: 'Watches',        icon: '⌚', verb: 'Place this exact watch on their wrist' },
