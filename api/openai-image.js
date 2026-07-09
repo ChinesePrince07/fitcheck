@@ -45,6 +45,25 @@ export default async function handler(req, res) {
     return;
   }
 
+  // POST ?chat — forward a raw chat-completions body to the router (debug; sync-secret gated).
+  // Some gateways serve image models through /chat/completions instead of /images/edits.
+  if (req.method === 'POST' && 'chat' in (req.query || {})) {
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!process.env.SYNC_SECRET || bearer !== process.env.SYNC_SECRET) { res.status(401).json({ error: { message: 'unauthorized' } }); return; }
+    const body = await readJson(req);
+    try {
+      const r = await fetch(`${BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const text = await r.text();
+      res.status(r.status).setHeader('Content-Type', 'application/json');
+      try { res.json(JSON.parse(text)); } catch { res.json({ raw: text.slice(0, 4000) }); }
+    } catch (e) { res.status(502).json({ error: { message: e?.message || 'router unreachable' } }); }
+    return;
+  }
+
   if (req.method !== 'POST') { res.status(405).json({ error: { message: 'POST only' } }); return; }
 
   const { model, prompt, images, size, quality } = await readJson(req);
