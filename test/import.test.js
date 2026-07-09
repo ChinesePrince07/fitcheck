@@ -91,6 +91,9 @@ test('guessCategory maps keywords to FitCheck categories', () => {
   assert.equal(guessCategory('Leather Belt'), 'belt');
   assert.equal(guessCategory('Aviator Sunglasses'), 'glasses');
   assert.equal(guessCategory('Round Metal Eyewear'), 'glasses');
+  assert.equal(guessCategory('Navy Wool Suit'), 'suit');
+  assert.equal(guessCategory('Black Tuxedo'), 'suit');
+  assert.notEqual(guessCategory('Cotton Tracksuit'), 'suit');   // tracksuit is not a suit
   assert.equal(guessCategory('Scented Candle'), 'other');
 });
 

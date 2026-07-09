@@ -12,6 +12,7 @@ const CATS = [
   { key: 'bottom',   label: 'Bottoms',        icon: '👖', verb: 'Completely remove the subject\'s original bottoms and dress them in these exact bottoms instead — none of the old pair may remain visible' },
   { key: 'belt',     label: 'Belts',          icon: '🪢', verb: 'Fasten this exact belt around their waist over their trousers or bottoms, threaded through the belt loops and buckled naturally at the front' },
   { key: 'outer',    label: 'Outerwear',      icon: '🧥', verb: 'Layer this exact jacket/outerwear naturally over their top' },
+  { key: 'suit',     label: 'Suits',          icon: '🤵', verb: 'Dress the subject in this exact suit — the tailored jacket and matching trousers worn together over a shirt, replacing their current outer layer and bottoms, keeping the suit\'s exact cut, colour and fabric' },
   { key: 'tie',      label: 'Ties',           icon: '👔', verb: 'Place this exact necktie on the subject, knotted neatly at the collar over their shirt and hanging naturally down the front' },
   { key: 'hat',      label: 'Hats & Beanies', icon: '🧢', verb: 'Place this exact hat/beanie naturally on their head' },
   { key: 'glasses',  label: 'Glasses',        icon: '👓', verb: 'Place these exact glasses on the subject\'s face, resting naturally on the nose and ears, while keeping their eyes, face and identity unchanged' },
