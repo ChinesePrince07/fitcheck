@@ -59,13 +59,14 @@ const MODEL_NAMES = {
 const BEST_MODEL = 'gemini-3-pro-image';   // Nano Banana Pro — strongest identity preservation for try-on
 const BEST_IMAGE_SIZE = '1K';              // ~1080p — faster, cheaper, and lighter on mobile (was 4K)
 const CLASSIFY_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];   // cheap vision model to categorise a garment by photo; 2nd is fallback if the 1st is busy
+/* Settings are deliberately minimal ("for the masses"): only the sync secret is
+   user-facing. Engine, model and keys are fixed server-side — generation always
+   runs on the hosted proxy. apiKey survives only as the config.js/local escape
+   hatch for development. */
 const DEFAULT_SETTINGS = {
   provider: 'gemini',
   apiKey: '',
   syncSecret: '',
-  engine: 'gemini',              // 'gemini' (Nano Banana) or 'openai' (GPT Image via router)
-  openaiModel: 'gpt-image-2',    // your router's name for the GPT image model
-  openaiQuality: 'medium',       // low | medium | high
 };
 
 const PERSON_MAX_DIM = 2048;   // keep the face at high resolution to help identity preservation
@@ -111,12 +112,9 @@ function saveSettings(s) {
 function proxyAvailable() {
   return location.protocol.startsWith('http') && !/^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
 }
-function canGenerate() {
-  const s = getSettings();
-  if (s.engine === 'openai') return proxyAvailable();   // router key is server-side only
-  return !!s.apiKey || proxyAvailable();
-}
-/* GPT Image sizes are fixed buckets — pick the one matching the subject's aspect. */
+function canGenerate() { return !!getSettings().apiKey || proxyAvailable(); }
+/* GPT Image sizes are fixed buckets — pick the one matching the subject's aspect.
+   (Used by the dormant openai engine; see PROVIDERS.openai.) */
 function openaiSize(person) {
   const r = (person.w || 1) / (person.h || 1);
   if (r >= 1.15) return '1536x1024';
@@ -628,12 +626,10 @@ function renderOutfitBar() {
   const n = Math.min(raw, MAX_LOOKS_PER_RUN);
   const label = n <= 1 ? 'Generate fit' : `Generate ${n} looks · ~$${(n * COST_PER_LOOK).toFixed(2)}`;
   const capNote = raw > MAX_LOOKS_PER_RUN ? `<span class="cap-note">${raw} combinations — will render the first ${MAX_LOOKS_PER_RUN}</span>` : '';
-  const eng = getSettings();
-  const badge = eng.engine === 'openai' ? `${esc(eng.openaiModel || 'gpt-image-2')} · ${esc(eng.openaiQuality || 'medium')}` : 'Nano Banana Pro · 1080p';
   $('#outfit-bar').innerHTML = `<div class="outfit-inner">
     <div class="chips">${chips}${capNote}</div>
     <input class="notes" id="notes-input" placeholder="style notes, e.g. tuck the shirt in" value="${esc(state.notes)}">
-    <span class="model-badge" title="Image engine">${badge}</span>
+    <span class="model-badge" title="Image engine">Nano Banana Pro · 1080p</span>
     ${state.generating
       ? `<span class="gen-status"><span class="spinner"></span> ${state.genProgress ? `Rendering look ${state.genProgress.i} of ${state.genProgress.total}…` : 'Rendering…'}</span>
          <button class="btn" data-action="cancel-generate">Cancel</button>`
@@ -678,13 +674,7 @@ function openViewer(lookId) {
 
 function openSettings() {
   const s = getSettings();
-  $('#set-key').value = s.apiKey;
-  $('#test-key-result').textContent = '';
-  $('#test-key-result').className = 'test-result';
   const sync = $('#sync-secret'); if (sync) sync.value = s.syncSecret || '';
-  const eng = $('#set-engine'); if (eng) eng.value = s.engine || 'gemini';
-  const om = $('#set-openai-model'); if (om) om.value = s.openaiModel || 'gpt-image-2';
-  const oq = $('#set-openai-quality'); if (oq) oq.value = s.openaiQuality || 'medium';
   setSyncStatus(syncEnabled() ? 'Sync on' : (proxyAvailable() ? 'Sync off — add a secret' : 'Sync runs on the hosted site'));
   $('#settings-modal').classList.add('open');
 }
@@ -1013,13 +1003,7 @@ async function applyMergedLibrary(lib) {
 async function generate() {
   if (state.generating) return;
   const s = getSettings();
-  if (!canGenerate()) {
-    openSettings();
-    toast(getSettings().engine === 'openai'
-      ? 'GPT Image runs through your router on the hosted site — set OPENAI_API_KEY server-side, then use fitcheck.andypandy.org.'
-      : 'Add your Gemini API key first (billing enabled — image models have no free tier).', 'err');
-    return;
-  }
+  if (!canGenerate()) { toast('Generation runs on the hosted site — open fitcheck.andypandy.org.', 'err'); return; }
   const person = state.photos.find(p => p.id === state.activePhotoId);
   if (!person) { toast('Add a photo of yourself first (section 1).', 'err'); return; }
   if (!anySelection()) { toast('Pick at least one item or a hairstyle to try on.', 'err'); return; }
@@ -1039,22 +1023,17 @@ async function generate() {
     const combo = combos[idx];
     const t0 = Date.now();
     try {
-      const useOpenai = s.engine === 'openai';
-      const genModel = useOpenai ? (s.openaiModel || 'gpt-image-1.5') : BEST_MODEL;
-      const genSize = useOpenai ? openaiSize(person) : BEST_IMAGE_SIZE;
-      const out = useOpenai
-        ? await PROVIDERS.openai.generate({
-            model: genModel, quality: s.openaiQuality || 'medium', size: genSize,
-            person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
-          })
-        : await PROVIDERS.gemini.generate({
-            apiKey: s.apiKey, model: genModel, imageSize: genSize,
-            person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
-          });
+      // Always the fixed default: Nano Banana Pro through the hosted proxy. The
+      // openai engine (PROVIDERS.openai + /api/openai-image) stays dormant until
+      // an image-capable router key exists — flip here when it does.
+      const out = await PROVIDERS.gemini.generate({
+        apiKey: s.apiKey, model: BEST_MODEL, imageSize: BEST_IMAGE_SIZE,
+        person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal,
+      });
       const look = {
         id: uid(), dataUrl: out.dataUrl,
         items: combo.items.map(i => ({ id: i.id, cat: i.cat })),
-        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: genModel, size: genSize,
+        hairPreset: combo.hairPreset, backdrop: state.backdrop, notes: state.notes, model: BEST_MODEL, size: BEST_IMAGE_SIZE,
         ms: Date.now() - t0, createdAt: Date.now(),
       };
       await dbPut('looks', look);
@@ -1112,19 +1091,6 @@ function armThen(btn, fn) {
   btn.classList.add('armed');
   btn.textContent = 'Sure?';
   setTimeout(() => { btn.classList.remove('armed'); btn.textContent = '✕'; }, 2500);
-}
-
-async function testKey() {
-  const key = $('#set-key').value.trim();
-  const out = $('#test-key-result');
-  if (!key) { out.textContent = 'Paste a key first'; out.className = 'test-result err'; return; }
-  out.textContent = 'Testing…'; out.className = 'test-result';
-  try {
-    await PROVIDERS.gemini.testKey(key);
-    out.textContent = '✓ Key works'; out.className = 'test-result ok';
-  } catch (e) {
-    out.textContent = e.message; out.className = 'test-result err';
-  }
 }
 
 /* ============================== events ============================== */
@@ -1251,19 +1217,9 @@ document.addEventListener('click', e => {
     case 'toggle-theme': cycleTheme(); break;
     case 'open-settings': openSettings(); break;
     case 'close-modal': closeModals(); break;
-    case 'toggle-key-vis': {
-      const inp = $('#set-key');
-      inp.type = inp.type === 'password' ? 'text' : 'password';
-      break;
-    }
-    case 'test-key': testKey(); break;
     case 'save-settings': {
       const s = getSettings();
-      s.apiKey = $('#set-key').value.trim();
       s.syncSecret = ($('#sync-secret')?.value || '').trim();
-      s.engine = ($('#set-engine')?.value === 'openai') ? 'openai' : 'gemini';
-      s.openaiModel = ($('#set-openai-model')?.value || '').trim() || 'gpt-image-2';
-      s.openaiQuality = $('#set-openai-quality')?.value || 'medium';
       saveSettings(s);
       closeModals();
       renderOutfitBar(); renderBanner();

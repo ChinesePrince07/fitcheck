@@ -37,8 +37,7 @@
 <div class="rule-band"><span class="rule-motif">✦</span></div>
 
 <div id="key-banner" class="banner hidden">
-  <span>No API key on file — generation is at rest until you add your Gemini key.</span>
-  <button class="btn small" data-action="open-settings">Open Settings</button>
+  <span>Generation runs on the hosted site — open <strong>fitcheck.andypandy.org</strong>.</span>
 </div>
 
 <main>
@@ -118,33 +117,7 @@
   <div class="modal-card">
     <header><h3>Settings</h3><button class="iconbtn" data-action="close-modal">✕</button></header>
     <label class="field">
-      <span>Gemini API key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">(obtain one)</a> — image models require billing; there is no free tier</span>
-      <span class="keyrow">
-        <input type="password" id="set-key" placeholder="AQ… or AIza…" autocomplete="off" spellcheck="false">
-        <button class="iconbtn" data-action="toggle-key-vis" title="Show/hide">👁</button>
-      </span>
-    </label>
-    <label class="field">
-      <span>Image engine</span>
-      <select id="set-engine">
-        <option value="gemini">Nano Banana Pro — Gemini (≈$0.14 · 1080p)</option>
-        <option value="openai">GPT Image — via your router</option>
-      </select>
-    </label>
-    <label class="field" id="openai-model-field">
-      <span>GPT model — your router's name for it</span>
-      <span class="keyrow">
-        <input type="text" id="set-openai-model" placeholder="gpt-image-2" autocomplete="off" spellcheck="false">
-        <select id="set-openai-quality" title="Quality">
-          <option value="low">low</option>
-          <option value="medium">medium</option>
-          <option value="high">high</option>
-        </select>
-      </span>
-    </label>
-    <p class="field note">GPT Image runs through your OpenAI-compatible router. The router key lives <strong>server-side</strong> — set <strong>OPENAI_API_KEY</strong> (and <strong>OPENAI_BASE_URL</strong>) in the Vercel env, then it works on the hosted site.</p>
-    <label class="field">
-      <span>Sync secret — same passphrase on every device shares your catalogue &amp; wardrobe (needs the hosted site)</span>
+      <span>Sync secret — same passphrase on every device shares your catalogue &amp; wardrobe</span>
       <span class="keyrow">
         <input type="password" id="sync-secret" placeholder="a passphrase you choose" autocomplete="off" spellcheck="false">
         <button class="btn small" data-action="sync-now" id="sync-now-btn">Sync now</button>
@@ -152,8 +125,6 @@
       <span class="sync-status" id="sync-status"></span>
     </label>
     <div class="row">
-      <button class="btn" data-action="test-key" id="test-key-btn">Test key</button>
-      <span id="test-key-result" class="test-result"></span>
       <span class="spacer"></span>
       <button class="btn primary" data-action="save-settings">Save</button>
     </div>
