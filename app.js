@@ -1019,17 +1019,14 @@ async function generate() {
   state.generating = true;
   state.abort = new AbortController();
   let done = 0, failed = 0, aborted = false, firstId = null;
-  for (let idx = 0; idx < combos.length; idx++) {
-    if (state.abort.signal.aborted) { aborted = true; break; }
-    state.genProgress = { i: idx + 1, total };
-    renderOutfitBar();
-    const combo = combos[idx];
+
+  // Render one combo. GPT Image 2 (medium) via the router proxy; on router
+  // failure fall back to Nano Banana Pro so a user never ends up with nothing.
+  const renderCombo = async (combo, idx) => {
+    if (state.abort.signal.aborted) return;
     const t0 = Date.now();
+    const gargs = { person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal };
     try {
-      // Fixed default: GPT Image 2 (medium) through the hosted router proxy.
-      // If the router errors (down / quota / slow), fall back to Nano Banana Pro
-      // so a user never ends up with nothing. User-cancels are not retried.
-      const gargs = { person, items: combo.items, notes: state.notes, hairPreset: combo.hairPreset, backdrop: state.backdrop, signal: state.abort.signal };
       let out, usedModel, usedSize;
       try {
         out = await PROVIDERS.openai.generate({ model: GPT_MODEL, quality: GPT_QUALITY, size: openaiSize(person), ...gargs });
@@ -1049,15 +1046,30 @@ async function generate() {
       await dbPut('looks', look);
       state.looks.unshift(look);
       firstId ||= look.id;
-      renderLooks();
       done++;
+      state.genProgress = { i: done, total };
+      renderLooks(); renderOutfitBar();
     } catch (e) {
-      if (e.name === 'AbortError') { aborted = true; break; }
+      if (e.name === 'AbortError') { aborted = true; return; }
       console.error('FitCheck generate failed:', e);
       toast(total > 1 ? `Look ${idx + 1}/${total}: ${e.message || 'failed'}` : (e.message || 'Generation failed.'), 'err');
       failed++;
     }
-  }
+  };
+
+  // Run looks with modest concurrency — a mix-and-match batch renders in rounds
+  // instead of one-at-a-time. Single-look runs are unchanged (pool of 1).
+  state.genProgress = { i: 0, total };
+  renderOutfitBar();
+  const CONCURRENCY = Math.min(3, combos.length);
+  const queue = combos.map((combo, idx) => ({ combo, idx }));
+  await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
+    while (queue.length && !state.abort.signal.aborted) {
+      const { combo, idx } = queue.shift();
+      await renderCombo(combo, idx);
+    }
+  }));
+
   state.generating = false; state.abort = null; state.genProgress = null;
   renderOutfitBar();
 

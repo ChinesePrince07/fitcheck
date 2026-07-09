@@ -26,31 +26,9 @@ async function readJson(req) {
 }
 
 export default async function handler(req, res) {
+  if (req.method !== 'POST') { res.status(405).json({ error: { message: 'POST only' } }); return; }
   const key = process.env.OPENAI_API_KEY;
   if (!key) { res.status(500).json({ error: { message: 'Server is missing OPENAI_API_KEY.' } }); return; }
-
-  // TEMP benchmark: from this function (iad1), time each lanyiapi region. Sync-secret gated; remove after.
-  if (req.method === 'GET' && 'bench' in (req.query || {})) {
-    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!process.env.SYNC_SECRET || bearer !== process.env.SYNC_SECRET) { res.status(401).json({ error: { message: 'unauthorized' } }); return; }
-    const hosts = ['https://us.lanyiapi.com/v1', 'https://hk.lanyiapi.com/v1', 'https://lanyiapi.com/v1'];
-    const out = {};
-    for (const h of hosts) {
-      const samples = [];
-      for (let i = 0; i < 4; i++) {
-        const t = Date.now();
-        try { await fetch(`${h}/models`, { headers: { Authorization: `Bearer ${key}` } }); samples.push(Date.now() - t); }
-        catch { samples.push(-1); }
-      }
-      let status = 0;
-      try { const r = await fetch(`${h}/models`, { headers: { Authorization: `Bearer ${key}` } }); status = r.status; } catch { status = -1; }
-      const ok = samples.filter(x => x >= 0).sort((a, b) => a - b);
-      out[h] = { status, median_ms: ok.length ? ok[Math.floor(ok.length / 2)] : null };
-    }
-    res.status(200).json(out); return;
-  }
-
-  if (req.method !== 'POST') { res.status(405).json({ error: { message: 'POST only' } }); return; }
 
   const { model, prompt, images, size, quality } = await readJson(req);
   if (!prompt || !Array.isArray(images) || !images.length) {
