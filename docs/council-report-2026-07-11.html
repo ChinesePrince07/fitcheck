@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Council Report — FitCheck Feature Strategy</title>
+<style>
+  :root { --ink:#1a1a1a; --sub:#666; --line:#e4e4e0; --bg:#fff; --card:#fafaf8; --accent:#e2360f;
+          --c1:#8a5a00; --c2:#0b6e4f; --c3:#1f4e8c; --c4:#8c1f3a; --c5:#5b3a8c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e8e6e0; --sub:#999; --line:#2a2a28; --bg:#141412; --card:#1c1c1a; }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; padding: 40px 20px 80px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; letter-spacing: -.02em; margin-bottom: 4px; }
+  .meta { color: var(--sub); font-size: 13px; margin-bottom: 28px; }
+  .question { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent); padding: 16px 18px; font-size: 15px; margin-bottom: 34px; }
+  .question b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--sub); margin-bottom: 6px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; margin: 34px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 22px 0 8px; }
+  p, li { font-size: 14.5px; }
+  ul, ol { padding-left: 22px; margin: 8px 0; }
+  li { margin-bottom: 6px; }
+  .verdict { background: var(--card); border: 1px solid var(--line); padding: 22px 24px; }
+  .verdict h3:first-child { margin-top: 0; }
+  .grid-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0 6px; }
+  .grid-table th, .grid-table td { border: 1px solid var(--line); padding: 7px 9px; text-align: center; }
+  .grid-table th { background: var(--card); font-size: 11.5px; }
+  .grid-table td:first-child { text-align: left; font-weight: 500; }
+  .yes { color: #0b6e4f; font-weight: 700; } .no { color: #b3261e; font-weight: 700; } .mid { color: var(--sub); }
+  .legend { font-size: 12px; color: var(--sub); margin-bottom: 10px; }
+  details { border: 1px solid var(--line); background: var(--card); margin-bottom: 10px; }
+  summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px; list-style: none; display: flex; align-items: center; gap: 10px; }
+  summary::before { content: "▸"; color: var(--sub); transition: transform .15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .body { padding: 4px 18px 16px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+  .split { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .split .side { flex: 1 1 260px; border: 1px solid var(--line); background: var(--card); padding: 12px 14px; font-size: 13.5px; }
+  .split .side b { display: block; margin-bottom: 4px; }
+  .first { border: 2px solid var(--accent); padding: 18px 20px; margin-top: 14px; }
+  .first b { text-transform: uppercase; font-size: 11px; letter-spacing: .1em; color: var(--accent); display: block; margin-bottom: 6px; }
+  footer { margin-top: 44px; color: var(--sub); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LLM Council Report</h1>
+  <div class="meta">FitCheck feature strategy · 5 advisors · 5 anonymous peer reviews · chairman synthesis · 2026-07-11</div>
+
+  <div class="question">
+    <b>The Question</b>
+    Brainstorm new features for FitCheck. Argue which will actually be useful for the masses and which have real financial potential. <span style="color:var(--sub)">(Framed with full context: working try-on app, solo dev, $0.03–0.12/look owner-paid COGS, WTP≈0 for consumer subs, counterfeit-catalog + grey-router blockers, Alta/Google/Whering landscape, the unoccupied point-of-sale wedge.)</span>
+  </div>
+
+  <h2>Chairman's Verdict</h2>
+  <div class="verdict">
+    <h3>Where the council agrees (high confidence)</h3>
+    <ul>
+      <li><b>Consumer subscriptions are dead.</b> All five accepted WTP ≈ 0; nobody proposed charging shoppers monthly.</li>
+      <li><b>The point-of-sale extension is the real estate that matters.</b> Executor, First-Principles and Expansionist all landed on "try this on with my wardrobe" on the product page; the Outsider's occasion mode is the same insight — money moves at the moment of intended purchase.</li>
+      <li><b>Kill the closet-management surface.</b> Calendars, weather suggestions, analytics, social feeds — Google/Whering bundle them free; they add cost with no revenue path.</li>
+      <li><b>The Yupoo/reseller machinery is a liability in anything public.</b> "Warehouse of fake clothes" poisons trust and carries legal exposure.</li>
+    </ul>
+
+    <h3>The recommendation</h3>
+    <p><b>Build the extension as the product, with the honest-fit layer as its spine</b> — the Executor's sequence, the First-Principles discipline, the Outsider's trust fix. One composite image <b>+</b> a blunt pairing verdict ("goes with 6 things you own / duplicates your grey hoodie") <b>+</b> a <i>data-driven</i> fit stamp from size charts &amp; measurements ("runs small — size up"). The image sells the look; the data tells the truth. Neither Google (no fit data at point of sale) nor Alta (no point-of-sale presence) ships that combination. Affiliate attach only on user-clicked buy — the Chrome-2025-compliant, Honey-safe pattern.</p>
+    <ol>
+      <li>Legit API account + auth + Skimlinks/Sovrn application (week one, prerequisite)</li>
+      <li>Extension on 3 hardcoded retailers: composite + pairing verdict + fit stamp</li>
+      <li>"Complete this outfit" — one-week affiliate-surface doubler</li>
+      <li>Shareable look permalinks / group-chat vote — the only free acquisition channel</li>
+    </ol>
+    <p><b>Skip:</b> seller studio on Poshmark/Vinted/Depop (marketplaces require actual-item photos — policy-broken), creator lookbooks (authenticity minefield), avatar chat, social feeds, daily outfit suggestions, iOS polish, brand SDK, "wardrobe-intent data moat" (no buyer, real privacy exposure). The one surviving sliver of the seller idea — Shopify boutiques shooting their <i>own legitimate</i> stock — is worth a landing page and 20 cold DMs, not the front of the queue.</p>
+    <p><b>Why the chairman overruled the 3–2 majority for the Expansionist:</b> the majority's own reviews contain its death sentence — a revenue plan whose first customers are marketplaces that ban AI listing photos, and whose flagship users sell counterfeits, is a ban-and-liability speedrun, not cashflow.</p>
+
+    <div class="first">
+      <b>The one thing to do first</b>
+      <b style="color:var(--ink); text-transform:none; font-size:14.5px; letter-spacing:0">The render-vs-reality test — this week, ~$50.</b>
+      Photograph yourself in 5 real outfits in a mirror. Generate the identical combinations in FitCheck. Show the pairs blind to 10 people: "which is real?" and "would the render have predicted the fit?" Every advisor's plan sits on the single untested assumption that the render resembles reality. Five days settles the council's central dispute before a line of extension code is written.
+    </div>
+  </div>
+
+  <h2>Agreement Map</h2>
+  <div class="legend">✓ = advocates &nbsp; ✗ = argues against &nbsp; ~ = adjacent/conditional &nbsp; — = silent</div>
+  <div style="overflow-x:auto">
+  <table class="grid-table">
+    <tr><th>Position</th><th>Contrarian</th><th>First&nbsp;Principles</th><th>Expansionist</th><th>Outsider</th><th>Executor</th></tr>
+    <tr><td>Consumer subscriptions viable</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td></tr>
+    <tr><td>Point-of-sale extension is the wedge</td><td class="no">✗</td><td class="yes">✓</td><td class="yes">✓</td><td class="mid">~</td><td class="yes">✓</td></tr>
+    <tr><td>Kill closet-management features</td><td class="yes">✓</td><td class="yes">✓</td><td class="mid">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+    <tr><td>Pivot to sellers/creators (B2B payer)</td><td class="mid">~</td><td class="no">✗</td><td class="yes">✓</td><td class="mid">—</td><td class="mid">—</td></tr>
+    <tr><td>Render honesty is the core risk</td><td class="yes">✓</td><td class="mid">—</td><td class="mid">—</td><td class="yes">✓</td><td class="mid">—</td></tr>
+  </table>
+  </div>
+  <div class="split">
+    <div class="side"><b>Peer-review vote: strongest response</b>Expansionist 3 · Executor 2 — reviewers 1–3 valued <i>changing the payer</i>; reviewers 4–5 valued <i>the only costed, sequenced plan</i>.</div>
+    <div class="side"><b>Most-flagged blind spot</b>Expansionist (4 of 5 reviewers): resale marketplaces require photos of the actual item — AI model shots risk bans; flagship customers sell counterfeits.</div>
+  </div>
+
+  <h2>Advisor Responses</h2>
+
+  <details><summary><span class="dot" style="background:var(--c4)"></span>The Contrarian — "the feature brainstorm is a decoy"</summary><div class="body">
+    <p>FitCheck has zero users, zero distribution, and a prior analysis that already concluded willingness-to-pay is zero. No feature fixes that. Three flaws everyone's avoiding:</p>
+    <p><b>1. Photo-real try-on can't answer the only question shoppers pay for: "will it fit?"</b> GPT Image drapes any garment flawlessly on any body — a fantasy renderer that hallucinates a perfect fit every time. The affiliate wedge monetizes flattery, not information. Returns won't drop; disappointed buyers will blame the app.</p>
+    <p><b>2. The "unoccupied wedge" is unoccupied because it's structurally broken.</b> The extension needs your wardrobe digitized first — a 50-garment photography chore the masses will never do, while Google auto-builds closets from Photos for free. Add 40–50s latency (impulse-shopping death), apparel affiliate rates of ~4–8% against $0.03–0.12 per generation with free users spamming looks, retailers' DOM breaking your injection weekly, and Chrome Web Store review risk. Negative unit economics wrapped in a maintenance treadmill.</p>
+    <p><b>3. Strangers' faces are a liability, not a feature.</b> Public launch means auth, billing, moderation, consent verification (people WILL upload photos of exes and classmates), CSAM screening, app-store scrutiny of biometric data. Months of solo-dev work producing zero user-visible value.</p>
+    <p>What survives scrutiny: features that need no strangers. "Pack for this trip," "what haven't I worn," resale-listing photo generation from wardrobe items — useful, cheap, keep it a personal tool or a $5 one-time toy. The honest financial-potential answer is: none, unless Andy pivots to selling the try-on pipeline B2B to small boutiques — and Shopify will eat that too.</p>
+  </div></details>
+
+  <details><summary><span class="dot" style="background:var(--c3)"></span>The First Principles Thinker — "you're asking the wrong question"</summary><div class="body">
+    <p>"What features should FitCheck have?" assumes features are the bottleneck. They aren't. FitCheck has zero users, zero distribution, and a cost structure where every free generation burns Andy's money. Adding features to a product nobody visits is decorating an empty store.</p>
+    <p>What is try-on <i>for</i>? Reducing purchase uncertainty — "will this look right on me, with what I already own?" Who has money riding on that uncertainty? Not the shopper (WTP ≈ 0). The retailer: returns run 20–40% in apparel. So the only unit-economics-positive event in this entire product is: <b>a generation that converts a hesitating shopper into a purchase someone pays Andy for.</b> Every feature should be judged by distance from that event.</p>
+    <p>That kills most brainstormable features instantly: outfit calendars, weather suggestions, packing lists, social sharing, closet analytics — all increase per-user cost, zero revenue path, and Google/Whering will bundle them free. Don't compete on the closet.</p>
+    <p>What survives: one feature. <b>The purchase-moment verdict.</b> Browser extension, "Try with my wardrobe" on any product page, one composite image plus a blunt pairing answer ("goes with 6 things you own / duplicates your grey hoodie"). Affiliate link out. 4–6 weeks solo; run cost recouped at ~3–8% commission on one conversion per ~30 generations. Everything else is a feature request from Andy-the-user, not Andy-the-business.</p>
+  </div></details>
+
+  <details><summary><span class="dot" style="background:var(--c5)"></span>The Expansionist — "everyone's staring at the shopper; change the payer"</summary><div class="body">
+    <p>The shoppers won't pay. But Andy has accidentally built two things sellers and creators will pay for, and he's treating them as plumbing.</p>
+    <p><b>1. Seller photo studio (repackaged, not rebuilt).</b> The bulk-importer plus generation pipeline is a product-photography replacement. Depop, Vinted, Poshmark, and Shopify boutique sellers pay $30–100 per model shot today. Andy's cost: $0.12/look. Sell credits at $0.50–1/shot, Stripe checkout, done. Sellers are businesses — they buy tools. 90% built; first revenue in weeks.</p>
+    <p><b>2. Creator lookbooks.</b> Influencers in the LTK/ShopMy economy buy hauls, shoot, return. Let them generate themselves wearing any importable product, affiliate links attached. They pay per generation <i>and</i> they're a distribution engine.</p>
+    <p><b>3. The consumer extension is a data play, not an affiliate play.</b> What someone owns plus what they're considering, at the moment of purchase — the rarest signal in retail. Affiliate pennies fund it; the wardrobe-intent graph is what brands eventually pay for. The extension is the wedge that collects the moat.</p>
+    <p><b>4. Cheap viral upside:</b> shared profiles ("try it on my partner before I buy the gift"). Near-zero build, natural K-factor.</p>
+    <p>Sequence: seller studio for cashflow now, creators for growth, extension for the moat. The consumer app everyone's fighting over is the least valuable layer of this stack.</p>
+  </div></details>
+
+  <details><summary><span class="dot" style="background:var(--c1)"></span>The Outsider — "a mirror that lies gets deleted after three returns"</summary><div class="body">
+    <p>Dumb question first: when I generate a try-on and it looks great, is that because the shirt suits me, or because the AI is programmed to make everything look great? If every image flatters, the app is a mirror that lies, and my sister would learn that after three returns and delete it.</p>
+    <p><b>#1: Honest fit signals.</b> Pull the size chart, ask my measurements once, stamp the image "this runs small, size up." That's what actually prevents a bad purchase — mostly scraping plus a text overlay, cheap. Trust is the product; the pretty picture is packaging.</p>
+    <p><b>#2: "Ask my friends" link.</b> Nobody decides on clothes alone. Send a look to the group chat, friends tap 🔥 or 🗑 without installing anything. A weekend of work — and your only realistic growth engine, because zero people are searching "virtual try-on app."</p>
+    <p><b>#3: Occasion mode.</b> "Wedding in June, here's my closet, what do I actually need to buy?" The one moment normal people spend real money on clothes with urgency; every suggested purchase is an affiliate link.</p>
+    <p><b>Kill or hide:</b> hair styles, backdrops, style notes, 15 categories, 2,600-item reseller drawers — "warehouse of fake clothes" poisons trust. And the 40-second wait: fix it with expectation ("we'll text you when your look is ready"), not engineering.</p>
+    <p>Would my dad use this? No. Would my sister, the night before a wedding, with a group-chat vote? Yes. Build for her.</p>
+  </div></details>
+
+  <details><summary><span class="dot" style="background:var(--c2)"></span>The Executor — "Monday morning: legit API account and affiliate signup"</summary><div class="body">
+    <p>Week one: direct OpenAI account + Skimlinks/Sovrn signup (a day each), auth via Clerk or Supabase (three days). Prerequisite, not optional.</p>
+    <p><b>The only feature worth building next is the browser extension:</b> "Try this on with my wardrobe" injected on Zara/Uniqlo/ASOS product pages. Andy already has the hard parts — URL-to-garment import and the compositing pipeline. Two to three weeks solo, three retailers hardcoded, no universal scraper. Monetization: affiliate rewrite of the buy link — 5–10% of a $60 cart is $3–6, which pays for 30–100 generations. Free tier capped at 5 renders/day; unit economics close without subscriptions.</p>
+    <p><b>Second: "complete this outfit"</b> — after a try-on, suggest one owned item plus one purchasable gap-filler with an affiliate link. Text-model call, fractions of a cent, one week, doubles affiliate surface area.</p>
+    <p><b>Third: shareable look permalinks.</b> Two days. The only acquisition channel a solo dev with no audience can afford.</p>
+    <p><b>Skip:</b> daily outfit suggestions (retention for users he doesn't have), social feeds (moderation he can't staff), avatar stylist chat (Alta's turf), brand embed SDK (requires sales calls), iOS polish until the extension proves anyone clicks.</p>
+    <p>Sequence: legit API + auth → extension MVP → affiliate links → share links. Eight weeks, under $200/month burn until traffic exists.</p>
+  </div></details>
+
+  <h2>Peer Review Highlights</h2>
+  <details><summary>What the anonymous review round surfaced</summary><div class="body">
+    <ul>
+      <li><b>Strongest-response vote:</b> Expansionist ×3 ("only one who changed the payer"), Executor ×2 ("only costed, sequenced plan").</li>
+      <li><b>Expansionist's fatal caveat</b> (flagged by 4 of 5 reviewers): Poshmark/Vinted/Depop require photos of the <i>actual item</i> — AI model shots risk bans; flagship customers are counterfeit resellers. "First revenue in weeks" collapses on a policy page.</li>
+      <li><b>Outsider's contradiction:</b> stamping "honest fit" on an image that always flatters creates dissonance — unless the signal comes from size-chart <i>data</i>, independent of the render. (That fix became the chairman's spine.)</li>
+      <li><b>Executor's blindness:</b> eight costed weeks, zero demand validation. "Buildable by Monday" ≠ "wanted."</li>
+      <li><b>First-Principles' unexamined wager:</b> bets everything on the purchase-moment verdict without stress-testing whether the verdict can be honest.</li>
+      <li><b>Universal miss #1 — validation before building.</b> All five reviewers independently: nobody proposed a single experiment or kill criterion, when every load-bearing assumption is testable in a week for under $100.</li>
+      <li><b>Universal miss #2 — affiliate-extension channel risk.</b> Raised as a Honey-precedent panic; adjudicated with verified context: Chrome's June 2025 policy permits disclosed, user-initiated affiliate extensions; Honey suits dismissed Nov 2025; Phia raised $35.5M doing exactly this. Channel open — but confirming Skimlinks/Sovrn accept a new extension partner is a day-one gate.</li>
+    </ul>
+  </div></details>
+
+  <footer>
+    LLM Council · counciled: "Brainstorm more features — which are useful for the masses and have financial potential" · FitCheck (fitcheck.andypandy.org) · 2026-07-11 · 5 advisors + 5 anonymous peer reviews + chairman synthesis · full transcript: docs/council-transcript-2026-07-11.md
+  </footer>
+</div>
+</body>
+</html>
