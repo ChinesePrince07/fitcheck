@@ -36,24 +36,6 @@ your photo + garments / complete outfit
 - **Preview hair and backdrops.** Try hairstyle references and move generated looks into a studio, street, café, beach, runway, or park.
 - **Keep a lookbook.** Generated results stay available for side-by-side comparison.
 
-## Run locally
-
-The client is plain HTML, CSS, and JavaScript. There is no front-end build step.
-
-```bash
-python3 -m http.server 4173
-# open http://localhost:4173
-```
-
-Add a Gemini API key in Settings. The image model requires a billing-enabled key.
-
-```bash
-npm install
-npm test
-```
-
-The bare local server supports the main client experience. Product imports, hosted key protection, and optional sync depend on the serverless routes and are intended for a Vercel deployment.
-
 ## Architecture
 
 ```text
