@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">FitCheck</title>
+  <desc id="desc">An editorial virtual try-on title card showing clothing references becoming several generated looks.</desc>
+  <rect width="1200" height="390" rx="28" fill="#f5f0ea"/>
+  <g transform="translate(58 51)">
+    <text font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="4" fill="#725a97">PERSONAL VIRTUAL TRY-ON</text>
+    <text y="92" font-family="Georgia, 'Times New Roman', serif" font-size="86" font-weight="700" fill="#241f27">FitCheck</text>
+    <text y="144" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="25" fill="#5f5862">See the outfit on your body before it reaches your cart.</text>
+    <g transform="translate(0 202)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17">
+      <rect width="170" height="44" rx="22" fill="#241f27"/><text x="26" y="28" fill="#fffaf5">MIX + MATCH</text>
+      <rect x="184" width="160" height="44" rx="22" fill="#d9c9ea"/><text x="208" y="28" fill="#3e3151">LINK IMPORT</text>
+      <text x="0" y="84" fill="#7e747f">LOCAL LIBRARY · PWA · GEMINI IMAGE</text>
+    </g>
+  </g>
+  <g transform="translate(748 35)">
+    <rect x="0" y="30" width="112" height="140" rx="15" fill="#e8d9cd"/>
+    <path d="M33 61L51 46H64L80 61L94 72L80 91V151H32V91L18 72Z" fill="#a87358"/>
+    <rect x="0" y="188" width="112" height="140" rx="15" fill="#ded9e8"/>
+    <path d="M37 211H76L87 309H61L56 245L51 309H25Z" fill="#4a4652"/>
+    <path d="M135 180H184" stroke="#725a97" stroke-width="4"/><path d="M174 170L188 180L174 190" fill="none" stroke="#725a97" stroke-width="4"/>
+    <g transform="translate(213 20)">
+      <rect width="174" height="318" rx="30" fill="#302a32"/>
+      <circle cx="87" cy="66" r="34" fill="#c79c81"/>
+      <path d="M53 101Q87 82 121 101L142 238H32Z" fill="#a87358"/>
+      <path d="M50 238H124L140 300H96L87 253L78 300H34Z" fill="#4a4652"/>
+      <rect x="24" y="25" width="126" height="268" rx="22" fill="none" stroke="#f4e8dd" stroke-width="2" stroke-dasharray="7 7"/>
+    </g>
+  </g>
+</svg>
